@@ -1,0 +1,139 @@
+# ══════════════════════════════════════════════════════════════════
+#  Deep Learning Study Notes — .gitignore
+# ══════════════════════════════════════════════════════════════════
+
+# ── Python virtual environments ───────────────────────────────────
+.venv/
+venv/
+env/
+.env/
+ENV/
+
+# ── Python cache & compiled files ─────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+
+# ── Build scripts (notebook generators — keep sources, not scaffolding) ──
+build_nb*.py
+
+# ── Jupyter Notebook checkpoints ──────────────────────────────────
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# ── Jupyter output files (auto-generated on run) ──────────────────
+# Uncomment below if you want to strip cell outputs before committing
+# *.ipynb
+
+# ── Notebook generated assets (re-created by running cells) ───────
+# notes/assets/           # keep assets — useful for static review
+
+# ── PyTorch checkpoints & saved models ────────────────────────────
+*.pt
+*.pth
+*.ckpt
+best_model.pt
+checkpoints/
+
+# ── Manim generated video output ─────────────────────────────────
+media/
+video_cache/
+*.mp4
+*.webm
+*.gif
+*.avi
+*.mov
+Tex/
+partial_movie_files/
+
+# ── Manim LaTeX temp files ────────────────────────────────────────
+*.aux
+*.log
+*.dvi
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.xdv
+*.pdf
+
+# ── Environment notes (likely personal scratch) ───────────────────
+envNote/
+
+# ── Scratch / temp files ──────────────────────────────────────────
+nb_outline.txt
+*.tmp
+*.temp
+*.bak
+*.orig
+*.swp
+*.swo
+*~
+
+# ── Data files (large, should use DVC or similar) ─────────────────
+data/
+datasets/
+*.csv
+*.tsv
+*.parquet
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.npy
+*.npz
+
+# ── Logs ──────────────────────────────────────────────────────────
+logs/
+runs/
+tensorboard/
+wandb/
+*.log
+lightning_logs/
+
+# ── IDE & Editor settings ─────────────────────────────────────────
+.vscode/
+.idea/
+*.code-workspace
+.history/
+*.sublime-project
+*.sublime-workspace
+
+# ── OS-generated files ────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ── Distribution / packaging ──────────────────────────────────────
+dist/
+build/
+*.egg-info/
+*.egg
+.eggs/
+site-packages/
+pip-wheel-metadata/
+
+# ── Coverage & testing ────────────────────────────────────────────
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.tox/
+*.cover
+*.coveragerc
+
+# ── Secrets & credentials — NEVER commit these ────────────────────
+.env
+.env.*
+*.env
+secrets.yaml
+secrets.json
+config/secrets/
+api_keys.txt

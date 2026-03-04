@@ -1,0 +1,7 @@
+numpy
+matplotlib
+networkx
+ipython
+python-dateutil
+manim
+torch
