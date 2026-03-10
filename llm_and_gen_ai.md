@@ -1,0 +1,70 @@
+## 7. Large Language Models (LLMs) & Generative AI
+- [ ] **Foundational LLM Concepts**
+    - [ ] Language modeling, Tokens, and N-grams
+    - [ ] Emergent abilities of scale
+    - [ ] Small Language Models (SLMs)
+    - [ ] Knowledge Distillation
+- [ ] **Ecosystem & Open-Weights Models**
+    - [ ] LLaMA (v1, v2, v3) architecture and impact
+    - [ ] Mistral and MoE (Mixture of Experts)
+    - [ ] BERT and its variants (RoBERTa, ALBERT)
+- [ ] **Training Life Cycle**
+    - [ ] Pre-training (unsupervised learning on massive corpora) vs. Fine-tuning
+    - [ ] Instruction Fine-Tuning (SFT)
+- [ ] **Model Optimization & Compression**
+    - [ ] Pruning techniques
+    - [ ] Types of Quantization (PTQ, QAT, NF4, AWQ)
+- [ ] **Parameter-Efficient Fine-Tuning (PEFT)**
+    - [ ] Types of LoRA (Standard LoRA, QLoRA, AdaLoRA, DoRA)
+- [ ] **Alignment & Preference Optimization**
+    - [ ] RLHF (Reinforcement Learning from Human Feedback)
+    - [ ] Deep dive: PPO (Proximal Policy Optimization)
+    - [ ] DPO (Direct Preference Optimization)
+    - [ ] ORPO (Odds Ratio Preference Optimization)
+- [ ] **Prompt Engineering & Usage**
+    - [ ] Zero-shot, Few-shot prompting
+    - [ ] Chain-of-Thought (CoT), Tree of Thoughts (ToT)
+- [ ] **Model Evaluation**
+    - [ ] Benchmarking (e.g., MMLU, HumanEval)
+    - [ ] LLM-as-a-Judge
+
+## 8. Retrieval-Augmented Generation (RAG)
+- [ ] **Core Concept & Architecture**
+    - [ ] Mitigating Hallucinations and updating knowledge
+    - [ ] The Retriever vs. The Generator
+- [ ] **Data Preparation & Ingestion**
+    - [ ] Document Parsing and Chunking Strategies
+    - [ ] Embedding Models (e.g., OpenAI embeddings, SentenceTransformers)
+    - [ ] Vector Indexing and Vector Databases
+- [ ] **Retrieval Mechanisms**
+    - [ ] Keyword Search (TF-IDF, BM25)
+    - [ ] Semantic Vector Search
+    - [ ] Hybrid Search and Reranking (Cross-Encoders)
+- [ ] **Advanced RAG Paradigm**
+    - [ ] Graph-RAG (Integrating Knowledge Graphs with RAG)
+    - [ ] Agentic-RAG (Routing queries, Tool-using retrievers)
+    - [ ] Modular RAG and Query Expansion
+    - [ ] Page-indexing and hierarchical retrieval
+
+## 9. Agentic AI and AI Agents
+- [ ] **The Agentic Loop Paradigm**
+    - [ ] **Perception**: Gathering data via tools/APIs
+    - [ ] **Reasoning**: LLMs as the cognitive engine
+    - [ ] **Planning**: Goal decomposition and step-by-step logic
+    - [ ] **Action**: Executing tasks via tool use/function calling
+    - [ ] **Reflection**: Evaluating outcomes and self-correction
+- [ ] **Core Capabilities**
+    - [ ] Tool Use & API Integration (Function Calling)
+- [ ] **Memory Structures & Implementations**
+    - [ ] Working memory (Short-term context)
+    - [ ] Episodic memory (Past interactions and experiences)
+    - [ ] Persistent Storage Memory (e.g., `.md` files as memory, Index memory)
+    - [ ] Advanced Memory Implementations: Mem0 paper concepts
+    - [ ] Long-term RAG and Distilled Memory
+- [ ] **Agentic Architectures**
+    - [ ] Single-Agent vs. Multi-Agent Systems
+    - [ ] Orchestration frameworks (LangChain, AutoGen, CrewAI, MCP)
+    - [ ] Agent-to-Agent (A2A) Protocols
+- [ ] **Deployment & Observability**
+    - [ ] Monitoring agent workflows and managing loops
+    - [ ] Guardrails and responsible AI guidelines

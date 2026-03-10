@@ -46,3 +46,30 @@
 *   **Structural Variations**
     *   Bidirectional RNNs
     *   Stacked/Deep RNNs
+
+## 5. Embeddings & Classic NLP
+- [ ] Classic Word Embeddings (Word2Vec, GloVe, FastText)
+- [ ] Contextual Embeddings vs. Static Embeddings
+- [ ] Sentence Transformers (e.g., SBERT)
+
+## 6. Attention & Transformers
+- [ ] **Foundations of Attention**
+    - [ ] The transition from sequence models (RNNs/LSTMs)
+    - [ ] The "Attention Is All You Need" breakthrough
+    - [ ] Encoder-Decoder structural paradigm
+- [ ] **Types of Attention Mechanisms**
+    - [ ] Self-Attention (Query, Key, Value)
+    - [ ] Cross-Attention
+    - [ ] Sparse Attention
+    - [ ] FlashAttention
+- [ ] **Core Architecture Components**
+    - [ ] Tokenization (BPE, WordPiece, SentencePiece)
+    - [ ] Types of Positional Embedding (Absolute, Relative, RoPE, ALiBi)
+    - [ ] Multi-Head Attention
+    - [ ] Position-wise Feed-Forward Networks
+    - [ ] Layer Normalization (Pre-Norm vs. Post-Norm) and Residual Connections
+- [ ] **Transformer Architecture Types**
+    - [ ] Encoder-only (e.g., BERT, RoBERTa)
+    - [ ] Decoder-only (e.g., GPT series, LLaMA)
+    - [ ] Encoder-Decoder (e.g., T5, BART)
+    - [ ] Vision Transformers (ViT)
