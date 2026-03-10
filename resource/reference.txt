@@ -1,0 +1,8 @@
+What does tokenization mean? url: https://huggingface.co/learn/llm-course/en/chapter2/4
+Normalization and Pre-Tokenization: url: https://huggingface.co/learn/llm-course/en/chapter6/4
+Byte-Pai Encoding: url: https://huggingface.co/learn/llm-course/en/chapter6/5
+WordPiece Encoding: url: https://huggingface.co/learn/llm-course/en/chapter6/6
+Unigram Encoding: url: https://huggingface.co/learn/llm-course/en/chapter6/7
+SentencePiece Encoding: 
+Build Tokenizer end-to-end: url: https://huggingface.co/learn/llm-course/en/chapter6/8
+Training New Tokenizer from old one: url: https://huggingface.co/learn/llm-course/en/chapter6/2
