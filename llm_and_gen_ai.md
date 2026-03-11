@@ -1,61 +1,135 @@
 ## 7. Large Language Models (LLMs) & Generative AI
 - [ ] **Foundational LLM Concepts**
     - [ ] Language modeling, Tokens, and N-grams
-    - [ ] Emergent abilities of scale
-    - [ ] Small Language Models (SLMs)
-    - [ ] Knowledge Distillation
+    - [ ] Emergent abilities of scale (Chain-of-Thought, arithmetic, etc.)
+    - [ ] Scaling Laws — Kaplan et al. (2020) and Chinchilla (2022)
+        - [ ] How model size, data size, and compute interact
+        - [ ] Compute-optimal training: tokens-per-parameter ratio
+    - [ ] Small Language Models (SLMs) — Phi, Gemma, SmolLM
+    - [ ] Knowledge Distillation — teacher-student training
 - [ ] **Ecosystem & Open-Weights Models**
-    - [ ] LLaMA (v1, v2, v3) architecture and impact
-    - [ ] Mistral and MoE (Mixture of Experts)
-    - [ ] BERT and its variants (RoBERTa, ALBERT)
+    - [ ] LLaMA (v1, v2, v3) — architecture, GQA, RoPE, SwiGLU
+    - [ ] Mistral 7B and Mixtral (MoE-based)
+    - [ ] DeepSeek series — DeepSeek-V2, DeepSeek-R1 (GRPO training)
+    - [ ] Qwen, Gemma, Falcon, Command-R families
+    - [ ] BERT and its variants (RoBERTa, ALBERT, DeBERTa)
 - [ ] **Training Life Cycle**
-    - [ ] Pre-training (unsupervised learning on massive corpora) vs. Fine-tuning
-    - [ ] Instruction Fine-Tuning (SFT)
+    - [ ] Pre-training — unsupervised next-token prediction on massive corpora
+    - [ ] Pre-training data pipelines: deduplication, quality filtering, data mixing
+    - [ ] Curriculum Learning and data scheduling
+    - [ ] Instruction Fine-Tuning (SFT) — format, data quality, instruction following
+    - [ ] Continued Pre-training on domain data
+    - [ ] Catastrophic Forgetting — continual/lifelong learning challenges
 - [ ] **Model Optimization & Compression**
-    - [ ] Pruning techniques
-    - [ ] Types of Quantization (PTQ, QAT, NF4, AWQ)
+    - [ ] Pruning techniques (structured vs unstructured)
+    - [ ] Types of Quantization (PTQ, QAT, NF4, AWQ, GPTQ)
+    - [ ] Speculative Decoding — draft model + verifier for fast inference
+    - [ ] KV Cache — memory layout, memory-efficient attention
+    - [ ] Continuous Batching and PagedAttention (vLLM)
 - [ ] **Parameter-Efficient Fine-Tuning (PEFT)**
-    - [ ] Types of LoRA (Standard LoRA, QLoRA, AdaLoRA, DoRA)
+    - [ ] LoRA — low-rank adaptation math (A·B decomposition)
+    - [ ] QLoRA — quantized base + LoRA adapters
+    - [ ] AdaLoRA — adaptive rank per layer
+    - [ ] DoRA — weight decomposition for LoRA
+    - [ ] Prompt Tuning and Prefix Tuning
 - [ ] **Alignment & Preference Optimization**
-    - [ ] RLHF (Reinforcement Learning from Human Feedback)
-    - [ ] Deep dive: PPO (Proximal Policy Optimization)
-    - [ ] DPO (Direct Preference Optimization)
+    - [ ] RLHF (Reinforcement Learning from Human Feedback) — full pipeline
+    - [ ] Reward Modelling — how reward models are trained and used
+    - [ ] Process Reward Models (PRM) vs Outcome Reward Models (ORM)
+    - [ ] Deep dive: PPO (Proximal Policy Optimization) in RLHF
+    - [ ] DPO (Direct Preference Optimization) — removes the need for RL
     - [ ] ORPO (Odds Ratio Preference Optimization)
+    - [ ] GRPO (Group Relative Policy Optimization) — DeepSeek-R1, 2025
+    - [ ] Constitutional AI (CAI) — Anthropic's rule-based self-critique alignment
+    - [ ] Rejection Sampling Fine-Tuning (RS-FT)
+    - [ ] Self-Play Fine-Tuning (SPIN)
+- [ ] **Test-Time Compute (Inference Scaling)** ← 2024-2025 paradigm shift
+    - [ ] Chain-of-Thought at inference time — o1 / DeepSeek-R1 paradigm
+    - [ ] Process-level reasoning vs outcome-level reasoning
+    - [ ] Best-of-N sampling, Majority voting, Self-consistency
+    - [ ] Monte Carlo Tree Search (MCTS) for reasoning
+    - [ ] Long-thinking models — budgeted reasoning, thinking tokens
 - [ ] **Prompt Engineering & Usage**
     - [ ] Zero-shot, Few-shot prompting
-    - [ ] Chain-of-Thought (CoT), Tree of Thoughts (ToT)
+    - [ ] Chain-of-Thought (CoT), Zero-shot CoT ("Let's think step by step")
+    - [ ] Tree of Thoughts (ToT), Graph of Thoughts
+    - [ ] Plan and Solve Prompting
+    - [ ] Self-consistency decoding
+    - [ ] Structured Outputs / JSON mode — reliable extraction
 - [ ] **Model Evaluation**
-    - [ ] Benchmarking (e.g., MMLU, HumanEval)
-    - [ ] LLM-as-a-Judge
+    - [ ] Benchmarking: MMLU, HumanEval, GSM8K, GPQA, MATH, LiveCodeBench
+    - [ ] LLM-as-a-Judge — using GPT-4 / Claude to evaluate responses
+    - [ ] MT-Bench, AlpacaEval, Arena-Hard for chat quality
+    - [ ] Reasoning benchmarks: AIME, AMC, OlympiadBench
+- [ ] **Long Context**
+    - [ ] Context window extension — YaRN, LongRoPE, PoSE
+    - [ ] Lost-in-the-Middle problem — positional bias in long contexts
+    - [ ] Retrieval vs. long context trade-offs
+- [ ] **Multimodal LLMs**
+    - [ ] Vision encoder + LLM architecture (LLaVA, MiniGPT-4, InstructBLIP)
+    - [ ] PaliGemma, Qwen-VL, InternVL — fully open multimodal models
+    - [ ] GPT-4V, Gemini 1.5, Claude 3 Vision
+    - [ ] Image tokenisation: patch encoding vs discrete tokens (VQVAE)
+    - [ ] Video understanding — LLaVA-Video, VideoLLaMA
+- [ ] **Model Merging**
+    - [ ] SLERP (Spherical Linear Interpolation)
+    - [ ] TIES (Task-Informed Ensemble Merging)
+    - [ ] DARE — Drop And REscale merging method
+- [ ] **LLM Safety & Robustness**
+    - [ ] Prompt injection attacks — direct and indirect
+    - [ ] Jailbreaking techniques and defences
+    - [ ] Red-teaming LLMs — systematic safety evaluation
+    - [ ] Hallucination types and mitigation strategies
+    - [ ] Watermarking LLM outputs
 
 ## 8. Retrieval-Augmented Generation (RAG)
 - [ ] **Core Concept & Architecture**
-    - [ ] Mitigating Hallucinations and updating knowledge
-    - [ ] The Retriever vs. The Generator
+    - [ ] Mitigating hallucinations and knowledge cutoff with external retrieval
+    - [ ] The Retriever vs. The Generator — clean separation of concerns
+    - [ ] RAG vs Long-Context LLMs — when to use retrieval vs stuffing
 - [ ] **Data Preparation & Ingestion**
-    - [ ] Document Parsing and Chunking Strategies
-    - [ ] Embedding Models (e.g., OpenAI embeddings, SentenceTransformers)
-    - [ ] Vector Indexing and Vector Databases
+    - [ ] Document Parsing (PDFs, HTML, tables) — Unstructured, LlamaParse
+    - [ ] Chunking Strategies (deep dive):
+        - [ ] Fixed-size chunking with overlap
+        - [ ] Recursive character splitting
+        - [ ] Semantic chunking (split on meaning boundaries)
+        - [ ] Late chunking (embed full doc then split embeddings)
+        - [ ] Parent-Child chunking — index small, retrieve large
+    - [ ] Embedding Models — OpenAI, Cohere, SentenceTransformers, E5, BGE
+    - [ ] Vector Indexing and Vector Databases (Pinecone, Weaviate, Chroma, Qdrant)
+    - [ ] Indexing algorithms: Flat, IVF, HNSW, IVF-PQ — trade-offs
 - [ ] **Retrieval Mechanisms**
-    - [ ] Keyword Search (TF-IDF, BM25)
-    - [ ] Semantic Vector Search
-    - [ ] Hybrid Search and Reranking (Cross-Encoders)
-- [ ] **Advanced RAG Paradigm**
-    - [ ] Graph-RAG (Integrating Knowledge Graphs with RAG)
-    - [ ] Agentic-RAG (Routing queries, Tool-using retrievers)
+    - [ ] Keyword Search — TF-IDF, BM25
+    - [ ] Semantic Vector Search — dense retrieval
+    - [ ] Hybrid Search — combine BM25 + dense, reciprocal rank fusion (RRF)
+    - [ ] Reranking — Cross-Encoders, Cohere Rerank, FlashRank
+    - [ ] ColBERT / ColPali — late interaction for token-level matching
+    - [ ] Hypothetical Document Embeddings (HyDE)
+    - [ ] Multi-Vector Retrieval — multiple embeddings per document
+- [ ] **Advanced RAG Paradigms**
+    - [ ] Graph-RAG — Microsoft's Knowledge Graph + RAG method
+    - [ ] Agentic-RAG — routing queries, tool-using retrievers
+    - [ ] Self-RAG — model decides when and what to retrieve
+    - [ ] Corrective RAG (CRAG) — evaluate and correct retrieved docs
+    - [ ] RAPTOR — Recursive Abstractive Processing for Tree-Organized Retrieval
+        - url: https://levelup.gitconnected.com/optimizing-rag-with-the-smarter-indexing-raptor-pipeline-65bb946526ad
     - [ ] Modular RAG and Query Expansion
     - [ ] Page-indexing and hierarchical retrieval
+    - [ ] Structured RAG — SQL + vector hybrid for structured data
 - [ ] **RAG Evaluation**
+    - [ ] RAGAS framework — automated RAG evaluation
     - [ ] Metrics: Context Precision, Context Recall, Faithfulness, Answer Relevance
+    - [ ] Component-level vs end-to-end evaluation
 - [ ] **RAG Optimization**
-    - [ ] Techniques for improving RAG performance
-    - [ ] Trade-offs and best practices
+    - [ ] Query rewriting and expansion techniques
+    - [ ] Embedding model fine-tuning for domain adaptation
+    - [ ] Re-ranking model tuning
+    - [ ] Trade-offs: latency, cost, recall, precision
 - [ ] **RAG Deployment**
-    - [ ] Deployment strategies for RAG systems
-    - [ ] Monitoring and maintenance of RAG systems
-- [ ] **RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval **
-    url for content: https://levelup.gitconnected.com/optimizing-rag-with-the-smarter-indexing-raptor-pipeline-65bb946526ad
-    
+    - [ ] Streaming RAG responses
+    - [ ] Caching strategies (semantic caching with GPTCache)
+    - [ ] Monitoring: retrieval quality, latency, user feedback
+
 ## 9. Agentic AI and AI Agents
 - [ ] **The Agentic Loop Paradigm**
     - [ ] **Perception**: Gathering data via tools/APIs
@@ -63,18 +137,72 @@
     - [ ] **Planning**: Goal decomposition and step-by-step logic
     - [ ] **Action**: Executing tasks via tool use/function calling
     - [ ] **Reflection**: Evaluating outcomes and self-correction
+- [ ] **Foundational Agent Patterns**
+    - [ ] ReAct (Reason + Act) — interleaved reasoning and action
+    - [ ] Reflexion — self-evaluation, episodic memory, retry loops
+    - [ ] Plan-and-Execute — separate planning phase from execution
+    - [ ] Tree of Thoughts (ToT) as a tree search over reasoning paths
+    - [ ] Chain of Thought Decoding vs Prompting
 - [ ] **Core Capabilities**
     - [ ] Tool Use & API Integration (Function Calling)
+    - [ ] Structured Outputs / JSON mode — reliable extraction for agents
+    - [ ] Code execution sandboxes (E2B, Modal)
+    - [ ] Computer Use / Browser Use agents (OpenInterpreter, Anthropic Computer Use)
 - [ ] **Memory Structures & Implementations**
-    - [ ] Working memory (Short-term context)
+    - [ ] Working memory (Short-term context window)
     - [ ] Episodic memory (Past interactions and experiences)
-    - [ ] Persistent Storage Memory (e.g., `.md` files as memory, Index memory)
+    - [ ] Persistent Storage Memory (e.g., `.md` files, key-value stores)
+    - [ ] Semantic memory via RAG (long-term knowledge retrieval)
     - [ ] Advanced Memory Implementations: Mem0 paper concepts
     - [ ] Long-term RAG and Distilled Memory
 - [ ] **Agentic Architectures**
     - [ ] Single-Agent vs. Multi-Agent Systems
-    - [ ] Orchestration frameworks (LangChain, AutoGen, CrewAI, MCP)
-    - [ ] Agent-to-Agent (A2A) Protocols
+    - [ ] Orchestration frameworks: LangChain, LangGraph, AutoGen, CrewAI
+    - [ ] Agent-to-Agent (A2A) Communication Protocols
+    - [ ] Model Context Protocol (MCP) — Anthropic's standardised tool interface
+    - [ ] Hierarchical agents — manager + sub-agents
+    - [ ] Multi-Agent debate, voting, and consensus (Society of Mind)
+- [ ] **Agent Evaluation**
+    - [ ] AgentBench — multi-task agent benchmark
+    - [ ] GAIA — real-world task solving benchmark
+    - [ ] SWE-Bench — software engineering agent benchmark
+    - [ ] WebArena, WorkArena — web interaction benchmarks
 - [ ] **Deployment & Observability**
-    - [ ] Monitoring agent workflows and managing loops
+    - [ ] Monitoring agent workflows and managing infinite loops
+    - [ ] Tracing frameworks: LangSmith, Arize Phoenix, Weave (W&B)
     - [ ] Guardrails and responsible AI guidelines
+    - [ ] Human-in-the-loop patterns and approval gates
+    - [ ] Sandboxing agent actions — rollback, dry-run modes
+
+## 10. Frontier Research Topics (2024–2025)
+- [ ] **State Space Models (SSM)**
+    - [ ] S4 — Structured State Space Sequence model
+    - [ ] Mamba — input-dependent (selective) state spaces
+    - [ ] Mamba-2 — state space duality theorem
+    - [ ] Hybrid architectures: Jamba (Mamba + Transformer), Zamba
+    - [ ] SSM vs Attention: trade-offs in memory, long-context, parallelism
+- [ ] **Test-Time Compute Scaling**
+    - [ ] o1 (OpenAI) — private chain-of-thought training
+    - [ ] DeepSeek-R1 — GRPO-based open reasoning model
+    - [ ] QwQ, Marco-o1 — open long-thinking models
+    - [ ] Inference-time search: MCTS, best-of-N, beam search
+    - [ ] Reward models as verifiers at inference time
+- [ ] **Multimodal & Vision-Language Models**
+    - [ ] LLaVA-1.5 / LLaVA-Next, InternVL2, Qwen-VL2
+    - [ ] Phi-3.5-Vision, PaliGemma, Idefics3
+    - [ ] Video LLMs: LLaVA-Video, VideoLLaMA3, InternVideo2
+    - [ ] Unified image-text generation: Janus, Show-o, Emu3
+- [ ] **Efficient Inference**
+    - [ ] vLLM — PagedAttention for throughput
+    - [ ] TensorRT-LLM — NVIDIA inference optimisation
+    - [ ] Medusa / EAGLE — speculative decoding with tree-based drafts
+    - [ ] GQA, Sliding Window Attention for long contexts
+- [ ] **World Models & Embodied AI**
+    - [ ] GAIA-1 (Wayve) — driving world model
+    - [ ] DreamerV3 — general world model for RL
+    - [ ] Vision-Language-Action (VLA) models: RT-2, OpenVLA, π0
+- [ ] **Synthetic Data & Self-Improvement**
+    - [ ] Self-instruct, Evol-Instruct, WizardLM — instruction data generation
+    - [ ] Phi series — textbooks-are-all-you-need approach
+    - [ ] Iterative self-improvement (STaR, V-STaR)
+    - [ ] Constitutional AI self-critique loop
