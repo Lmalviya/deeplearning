@@ -45,7 +45,17 @@
     - [ ] Agentic-RAG (Routing queries, Tool-using retrievers)
     - [ ] Modular RAG and Query Expansion
     - [ ] Page-indexing and hierarchical retrieval
-
+- [ ] **RAG Evaluation**
+    - [ ] Metrics: Context Precision, Context Recall, Faithfulness, Answer Relevance
+- [ ] **RAG Optimization**
+    - [ ] Techniques for improving RAG performance
+    - [ ] Trade-offs and best practices
+- [ ] **RAG Deployment**
+    - [ ] Deployment strategies for RAG systems
+    - [ ] Monitoring and maintenance of RAG systems
+- [ ] **RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval **
+    url for content: https://levelup.gitconnected.com/optimizing-rag-with-the-smarter-indexing-raptor-pipeline-65bb946526ad
+    
 ## 9. Agentic AI and AI Agents
 - [ ] **The Agentic Loop Paradigm**
     - [ ] **Perception**: Gathering data via tools/APIs
