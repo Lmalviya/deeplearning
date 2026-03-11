@@ -30,21 +30,20 @@
 
 ## 3. Convolutional Neural Networks (CNN) - Operations
 *   **Core Operations**
-    *   [Convolutions (Kernels, Stride, Padding)](notes/06_cnn_convolutions.ipynb)
-    *   [Feature Map Visualization & Pooling](notes/07_cnn_feature_maps_pooling.ipynb) (Max, Average, Global Average)
+    *   [Convolutions (Kernels, Stride, Padding)](notes/07_cnn_convolutions.ipynb)
+    *   [Feature Map Visualization & Pooling](notes/08_cnn_feature_maps_pooling.ipynb) (Max, Average, Global Average)
     *   Dilated and Transposed Convolutions
     *   Receptive Field calculation
 
 ## 4. Sequence Modeling (RNNs)
 *   **Vanilla RNNs**
-    *   [Hidden State and Temporal Dependencies](notes/09_rnn_basics.ipynb)
-    *   Many-to-One, One-to-Many, Many-to-Many mappings
+    *   [RNN Architecture: From Dense to Recurrent](notes/09_rnn_comprehensive.ipynb)
+    *   Hidden States, Weight Sharing, Multi-Channel Components
+    *   Uni-directional, Bi-directional, Multi-layer variations
+    *   Proof: The Vanishing/Exploding Gradient Problem
 *   **Gated Architectures**
     *   [LSTM (Long Short-Term Memory) & GRU (Gated Recurrent Unit)](notes/10_lstm_gru.ipynb)
     *   Forget gates, Input gates, Output gates, Reset and Update gates
-*   **Structural Variations**
-    *   [Bidirectional and Stacked/Deep RNNs](notes/11_advanced_rnns.ipynb)
-    *   Forward + Backward passes, Hierarchical depth
 
 ## 5. Embeddings & Classic NLP
 - [ ] Classic Word Embeddings (Word2Vec, GloVe, FastText)
