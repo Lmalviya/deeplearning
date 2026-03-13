@@ -1,0 +1,23 @@
+The full JD covers approximately 15-18 distinct technical areas.
+Each area alone could be a full day of study.
+
+The complete list from the JD:
+  → Continued pretraining
+  → SFT (Supervised Fine-Tuning)
+  → DPO / IPO / ORPO / GRPO (preference optimization)
+  → Reward modeling + PPO (full RLHF)
+  → Data pipelines (dedup, quality filtering, synthetic data)
+  → Evaluation frameworks (offline + online)
+  → Tool/function calling reliability
+  → Quantization (AWQ / GPTQ / bnb)
+  → Distillation
+  → Speculative decoding
+  → KV cache optimization
+  → Distributed training (DeepSpeed ZeRO / FSDP)
+  → Serving (vLLM / TGI / TensorRT-LLM)
+  → Indic language + Hinglish handling
+  → Alignment and hallucination reduction
+  → CI/CD for models, A/B testing, drift monitoring
+
+Honest answer: Mastering all of this in 2 days → NOT possible.
+Being interview-ready to speak confidently → POSSIBLE.
