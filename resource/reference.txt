@@ -6,3 +6,27 @@ Unigram Encoding: url: https://huggingface.co/learn/llm-course/en/chapter6/7
 SentencePiece Encoding: 
 Build Tokenizer end-to-end: url: https://huggingface.co/learn/llm-course/en/chapter6/8
 Training New Tokenizer from old one: url: https://huggingface.co/learn/llm-course/en/chapter6/2
+
+
+
+word2vec, skipgram, skipgram, fasttext:
+1. https://jalammar.github.io/illustrated-word2vec/
+2. https://israelg99.github.io/2017-03-23-Word2Vec-Explained/
+3. https://www.kaggle.com/code/pierremegret/gensim-word2vec-tutorial
+4. https://medium.com/@chaudhryalinaeem/mastering-word2vec-building-and-understanding-the-skip-gram-algorithm-cbbb16a58dab
+5. https://wandb.ai/authors/embeddings-2/reports/An-Introduction-to-the-Global-Vectors-GloVe-Algorithm--VmlldzozNDg2NTQ
+
+
+ELMO
+1. https://medium.com/analytics-vidhya/contextual-word-embeddings-part1-20d84787c65
+2. https://mbrenndoerfer.com/writing/elmo-ulmfit-transfer-learning-natural-language-processing
+
+sentence transformer
+1. https://www.marqo.ai/course/introduction-to-sentence-transformers
+
+1. https://www.kaggle.com/code/rhtsingh/utilizing-transformer-representations-efficiently
+
+clip
+1. https://medium.com/rectlabs/clip-contrastive-language-image-pre-training-dce66ae18fe1
+2. https://huggingface.co/learn/computer-vision-course/en/unit4/multimodal-models/clip-and-relatives/clip
+

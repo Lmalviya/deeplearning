@@ -1,0 +1,393 @@
+"""Generate llm_basic/06_tokenisation.ipynb — BPE, WordPiece, SentencePiece, Unigram"""
+import nbformat as nbf, os
+os.makedirs('llm_basic/assets', exist_ok=True)
+nb = nbf.v4.new_notebook()
+cells = []
+def md(t): return nbf.v4.new_markdown_cell(t)
+def code(t): return nbf.v4.new_code_cell(t)
+
+# ── Title ─────────────────────────────────────────────────────────────────────
+cells.append(md(
+    "# Subword Tokenisation — BPE, WordPiece, SentencePiece & Unigram\n\n"
+    "**Why tokenisation matters:** Before any embedding or LLM can process text, "
+    "that text must be split into discrete units (tokens). The tokeniser determines:\n"
+    "- The model's vocabulary size\n"
+    "- How it handles rare / unknown words\n"
+    "- How efficiently it encodes text (fewer tokens = less computation)\n"
+    "- Cross-lingual generalisation ability\n\n"
+    "**Topics covered:**\n"
+    "1. Naive tokenisation and its problems\n"
+    "2. Byte Pair Encoding (BPE) — step-by-step\n"
+    "3. WordPiece — BERT's variant\n"
+    "4. SentencePiece and Unigram — LLaMA/T5's approach\n"
+    "5. Vocabulary size vs OOV trade-off\n"
+    "6. Why tokenisation matters for LLM performance\n"
+    "7. Code: implement BPE from scratch\n"
+    "8. Interview Q&A"
+))
+
+# ── Why Naive Tokenisation Fails ─────────────────────────────────────────────
+cells.append(md(
+    "## 1. Naive Tokenisation and Its Problems\n\n"
+    "### Word-Level Tokenisation\n"
+    "The simplest approach: split text on whitespace and punctuation.\n\n"
+    "```\n"
+    "'I love running' → ['I', 'love', 'running']\n"
+    "```\n\n"
+    "**Problems:**\n"
+    "1. **Vocabulary explosion:** English has ~1M+ distinct words. "
+    "A model with V=1M vocabulary has enormous embedding tables.\n"
+    "2. **OOV (Out-of-Vocabulary):** Any word not seen in training becomes `[UNK]`. "
+    "Rare names, technical terms, typos → all collapsed to one unknown token.\n"
+    "3. **Morphological blindness:** 'run', 'runs', 'running', 'runner' are "
+    "4 unrelated vocabulary entries. The shared root 'run' is never exploited.\n"
+    "4. **Language sensitivity:** Agglutinative languages (Turkish, Finnish, Hungarian) "
+    "can form words with dozens of morphemes — vocabulary is astronomically large.\n\n"
+    "### Character-Level Tokenisation\n"
+    "Split text into individual characters.\n\n"
+    "```\n"
+    "'cats' → ['c', 'a', 't', 's']\n"
+    "```\n\n"
+    "**Benefits:** Tiny vocabulary (~256 for ASCII/bytes), zero OOV words.\n\n"
+    "**Problems:**\n"
+    "1. **Very long sequences:** 'the quick brown fox' = 18 characters. "
+    "Transformers have quadratic attention complexity in sequence length — "
+    "character sequences are much longer than word sequences.\n"
+    "2. **No morpheme structure:** The model must learn from scratch that "
+    "'c', 'a', 't', 's' form the word 'cats'. This takes more data and more parameters.\n\n"
+    "### Subword Tokenisation — The Middle Ground\n"
+    "The solution: split text into **subword units** — smaller than words but larger than characters.\n\n"
+    "- Common words ('the', 'is') → kept as single tokens\n"
+    "- Rare words ('tokenisation', 'hypothetical') → split into common subwords ('token', '##isation')\n"
+    "- Unknown strings → split into characters or bytes as fallback\n\n"
+    "This gives a vocabulary of ~30,000–100,000 tokens, balancing sequence length and OOV coverage.\n\n"
+    "The three dominant approaches: **BPE**, **WordPiece**, **Unigram/SentencePiece**.\n\n"
+    "---\n\n"
+    "## 2. Byte Pair Encoding (BPE)\n\n"
+    "**Origin:** Originally a data compression algorithm (Gage, 1994). "
+    "Adapted for NLP by Sennrich et al. (2016). Used in GPT-2, GPT-3, GPT-4, RoBERTa, LLaMA.\n\n"
+    "### Core Idea\n"
+    "Start with characters. Repeatedly merge the **most frequent pair** of adjacent tokens.\n"
+    "Each merge creates a new subword token and increases vocabulary by 1.\n"
+    "Stop when vocabulary reaches the desired size.\n\n"
+    "### Step-by-Step Example\n\n"
+    "**Corpus** (with frequencies):\n"
+    "```\n"
+    "'hug' x 10,  'pug' x 5,  'pun' x 12,  'bun' x 4,  'hugs' x 5\n"
+    "```\n\n"
+    "**Step 0 — Base vocabulary** (all individual characters):\n"
+    "```\n"
+    "['b', 'g', 'h', 'n', 'p', 's', 'u']\n"
+    "Each word split to chars:\n"
+    "  h-u-g (x10),  p-u-g (x5),  p-u-n (x12),  b-u-n (x4),  h-u-g-s (x5)\n"
+    "```\n\n"
+    "**Step 1 — Count all adjacent pairs:**\n"
+    "```\n"
+    "  (u,g): appears in 'hug'(x10) + 'pug'(x5) + 'hugs'(x5) = 20 times  ← MOST FREQUENT\n"
+    "  (h,u): in 'hug'(x10) + 'hugs'(x5) = 15 times\n"
+    "  (u,n): in 'pun'(x12) + 'bun'(x4)  = 16 times\n"
+    "  (p,u): in 'pug'(x5)  + 'pun'(x12) = 17 times\n"
+    "```\n\n"
+    "**Merge 1:** (u, g) → 'ug'\n"
+    "```\n"
+    "New vocab: ['b', 'g', 'h', 'n', 'p', 's', 'u', 'ug']\n"
+    "Corpus now: h-ug (x10), p-ug (x5), p-u-n (x12), b-u-n (x4), h-ug-s (x5)\n"
+    "```\n\n"
+    "**Step 2 — Recount pairs:**\n"
+    "```\n"
+    "  (h,ug): in 'h-ug'(x10) + 'h-ug-s'(x5) = 15 times\n"
+    "  (u,n):  in 'p-u-n'(x12) + 'b-u-n'(x4) = 16 times  ← MOST FREQUENT\n"
+    "  (p,ug): in 'p-ug'(x5) = 5 times\n"
+    "```\n\n"
+    "**Merge 2:** (u, n) → 'un'\n"
+    "```\n"
+    "New vocab: [..., 'ug', 'un']\n"
+    "Corpus: h-ug (x10), p-ug (x5), p-un (x12), b-un (x4), h-ug-s (x5)\n"
+    "```\n\n"
+    "**Step 3 — Recount:**\n"
+    "```\n"
+    "  (h,ug): 10+5 = 15  ← MOST FREQUENT\n"
+    "  (p,un): 12\n"
+    "  (b,un): 4\n"
+    "  (p,ug): 5\n"
+    "  (ug,s): 5 (from 'h-ug-s')\n"
+    "```\n\n"
+    "**Merge 3:** (h, ug) → 'hug'\n"
+    "```\n"
+    "New vocab: [..., 'ug', 'un', 'hug']\n"
+    "Corpus: hug (x10), p-ug (x5), p-un (x12), b-un (x4), hug-s (x5)\n"
+    "```\n\n"
+    "Continue until vocabulary reaches target size (e.g., 50,000 for GPT-2).\n\n"
+    "### BPE at Inference Time\n"
+    "At inference, split new text using the **learned merge rules in order**:\n"
+    "1. Start with characters\n"
+    "2. Apply merge rules from highest to lowest frequency\n"
+    "3. Stop when no more merges can be applied\n\n"
+    "**Example:** Tokenise new word 'hugs' with learned vocab {h,u,g,s,ug,un,hug}:\n"
+    "```\n"
+    "Start:    h-u-g-s\n"
+    "Apply (u,g)→ug:  h-ug-s\n"
+    "Apply (h,ug)→hug: hug-s\n"
+    "Result: ['hug', 's']\n"
+    "```\n\n"
+    "### Byte-Level BPE (GPT-2/GPT-4)\n"
+    "Instead of Unicode characters, start from **bytes** (256 possible values).\n"
+    "- Every possible text, in any language, can be encoded — zero OOV\n"
+    "- Emojis, Arabic, Chinese — all represented as byte sequences\n"
+    "- GPT-2 uses vocab size 50,257 (50,000 merges + 256 base bytes + [endoftext])\n\n"
+    "---\n\n"
+    "## 3. WordPiece — BERT's Tokeniser\n\n"
+    "**Used by:** BERT, DistilBERT, ALBERT, Electra\n\n"
+    "### Key Difference from BPE\n"
+    "BPE merges the pair with the **highest raw frequency**.\n"
+    "WordPiece merges the pair that **maximises language model likelihood**:\n\n"
+    "$$\\text{score}(A, B) = \\frac{\\text{freq}(AB)}{\\text{freq}(A) \\times \\text{freq}(B)}$$\n\n"
+    "**Intuition:** Prefer merging pairs where the joint token is more common "
+    "than would be expected from the independent frequencies of A and B.\n\n"
+    "**Example:**\n"
+    "```\n"
+    "freq('un') = 50,  freq('ique') = 20,  freq('unique') = 45\n"
+    "score('un', 'ique') = 45 / (50 x 20) = 0.045\n\n"
+    "freq('is') = 200, freq('land') = 80, freq('island') = 5\n"
+    "score('is', 'land') = 5 / (200 x 80) = 0.0003  ← very low, don't merge!\n"
+    "```\n\n"
+    "'unique' deserves to be a token because 'un' and 'ique' rarely appear together "
+    "in other contexts — their co-occurrence is specific.\n"
+    "'island' should NOT be merged because 'is' and 'land' both appear independently everywhere.\n\n"
+    "### BERT's '##' Prefix Convention\n"
+    "BERT's WordPiece adds '##' to any subword that is NOT at the start of a word:\n"
+    "```\n"
+    "'playing' → 'play', '##ing'\n"
+    "'Tokenisation' → 'Token', '##isation'\n"
+    "'unbelievable' → 'un', '##believable'\n"
+    "```\n"
+    "This makes it possible to reconstruct the original text from tokens "
+    "(just remove ## and concatenate).\n\n"
+    "---\n\n"
+    "## 4. SentencePiece / Unigram — LLaMA, T5, Gemma\n\n"
+    "**Used by:** T5, mT5, LLaMA (1&2), Mistral, Gemma, ALBERT\n\n"
+    "### Why SentencePiece?\n"
+    "BPE and WordPiece both require **pre-tokenisation** (split on spaces first). "
+    "This means they're not truly language-agnostic:\n"
+    "- Chinese/Japanese have no spaces between words\n"
+    "- Some languages have complex word boundary rules\n\n"
+    "SentencePiece treats the input as a **raw Unicode character sequence** — no pre-tokenisation.\n"
+    "It treats spaces as just another character (represented as '▁'):\n"
+    "```\n"
+    "'Hello world' → ['▁Hello', '▁world']\n"
+    "'不明觉厉'    → ['▁不', '明', '觉', '厉']  (or merged subwords for common sequences)\n"
+    "```\n\n"
+    "### The Unigram Model\n\n"
+    "Unigram starts with a **large candidate vocabulary** (e.g., all possible subwords up to length 16) "
+    "and **removes** tokens one by one.\n\n"
+    "At each step, remove the token whose removal **minimises the loss** "
+    "in a unigram language model over the training corpus.\n\n"
+    "**Unigram language model:** Assume each token is chosen independently.\n"
+    "Given a tokenisation $T = (t_1, t_2, \\ldots, t_n)$ of sentence $S$:\n\n"
+    "$$P(T) = \\prod_{i=1}^{n} P(t_i)$$\n\n"
+    "The probability of each token $P(t)$ is estimated from its frequency in the corpus.\n\n"
+    "**Best tokenisation** of a sentence is the one with maximum probability:\n\n"
+    "$$T^* = \\arg\\max_{T \\in \\text{all splits}} P(T) = \\arg\\max_{T} \\sum_{i} \\log P(t_i)$$\n\n"
+    "This can be solved efficiently with the Viterbi algorithm.\n\n"
+    "**Loss** over the corpus:\n\n"
+    "$$\\mathcal{L} = -\\sum_{s \\in \\text{corpus}} \\log P^*(s)$$\n\n"
+    "where $P^*(s)$ is the probability of sentence $s$ under its best tokenisation.\n\n"
+    "The algorithm removes the token whose removal decreases $\\mathcal{L}$ the least "
+    "(i.e., it's the most redundant token). Repeat until target vocabulary size.\n\n"
+    "### BPE vs WordPiece vs Unigram Summary\n\n"
+    "| Property | BPE | WordPiece | Unigram |\n"
+    "|---|---|---|---|\n"
+    "| **Algorithm** | Greedy merge (most frequent pair) | Greedy merge (max likelihood) | Prune from large vocab |\n"
+    "| **Pre-tokenisation** | Required | Required | NOT required |\n"
+    "| **Language-agnostic** | Mostly | Mostly | Fully |\n"
+    "| **Tokenisation** | Deterministic | Deterministic | Can be probabilistic |\n"
+    "| **Used by** | GPT family, RoBERTa | BERT, DistilBERT | LLaMA, T5, mT5, Gemma |\n"
+    "| **Special tokens** | None by default | `##` prefix for subwords | `▁` prefix for word start |\n\n"
+    "---\n\n"
+    "## 5. Why Tokenisation Choices Matter\n\n"
+    "### Vocabulary Size Trade-off\n\n"
+    "| Vocab Size | Pros | Cons |\n"
+    "|---|---|---|\n"
+    "| Small (~1K) | Tiny embedding table, fast | Very long sequences, OOV issues |\n"
+    "| Medium (~32K) | Good balance | Standard for most LLMs |\n"
+    "| Large (~100K+) | Shorter sequences, better rare word coverage | Very large embedding table, slower |\n\n"
+    "### Fertility — Tokens per Word\n"
+    "**Fertility** measures how many tokens a word is split into on average.\n"
+    "- English: ~1.2 tokens/word (most common words are single tokens)\n"
+    "- German: ~1.5 tokens/word (compound words split more)\n"
+    "- Turkish: ~2.5 tokens/word (agglutinative, many suffixes)\n"
+    "- Chinese: ~2.0 tokens/word with byte-level BPE (characters encoded as multiple bytes)\n\n"
+    "High fertility → longer sequences → more computation → higher cost.\n\n"
+    "**Cross-lingual implications:** A tokeniser trained on English (like original GPT-2) "
+    "will be very inefficient for other languages, causing much higher fertility. "
+    "LLaMA's SentencePiece tokeniser is more balanced across languages.\n\n"
+    "### The 'Tokenisation Bug' Classes\n\n"
+    "**Arithmetic errors:** LLMs struggle with multi-digit numbers partly because digits "
+    "are split inconsistently into tokens. '12345' might tokenise as ['123', '45'] in one "
+    "context and ['1', '2345'] in another. The model cannot reliably perform column arithmetic.\n\n"
+    "**Spelling errors:** LLMs are worse at spelling correction partly because they don't "
+    "see individual letters — they see subword chunks. 'cat' might be one token "
+    "but the model has no direct access to 'c', 'a', 't' as separate units.\n\n"
+    "**Language imbalance:** Models trained primarily on English tokens perform worse on "
+    "low-resource languages — not only due to training data scarcity but also because "
+    "the tokeniser gives non-English text much higher fertility."
+))
+
+# ── BPE From Scratch Code ─────────────────────────────────────────────────────
+bpe_code = "\n".join([
+    "from collections import defaultdict, Counter",
+    "import matplotlib.pyplot as plt",
+    "",
+    "def get_vocab(corpus):",
+    "    # Split each word into characters + special end-of-word marker",
+    "    vocab = defaultdict(int)",
+    "    for word, freq in corpus.items():",
+    "        # Represent word as space-separated chars with </w> end marker",
+    "        chars = ' '.join(list(word)) + ' </w>'",
+    "        vocab[chars] += freq",
+    "    return vocab",
+    "",
+    "def get_pairs(vocab):",
+    "    # Count all adjacent pairs of symbols across the vocabulary",
+    "    pairs = defaultdict(int)",
+    "    for word, freq in vocab.items():",
+    "        symbols = word.split()",
+    "        for i in range(len(symbols)-1):",
+    "            pairs[(symbols[i], symbols[i+1])] += freq",
+    "    return pairs",
+    "",
+    "def merge_vocab(pair, vocab):",
+    "    # Merge all occurrences of `pair` in the vocab",
+    "    new_vocab = {}",
+    "    bigram = ' '.join(pair)         # 'a b'",
+    "    replacement = ''.join(pair)     # 'ab'",
+    "    for word, freq in vocab.items():",
+    "        new_word = word.replace(bigram, replacement)",
+    "        new_vocab[new_word] = freq",
+    "    return new_vocab",
+    "",
+    "# ── Training corpus ──",
+    "corpus = {",
+    "    'hug': 10, 'pug': 5, 'pun': 12, 'bun': 4, 'hugs': 5,",
+    "    'bug': 3,  'fun': 8, 'run': 15, 'runs': 7, 'running': 3,",
+    "}",
+    "",
+    "vocab = get_vocab(corpus)",
+    "print('Initial vocabulary (character-level):')",
+    "for w, f in sorted(vocab.items(), key=lambda x: -x[1])[:5]:",
+    "    print(f'  {repr(w):35s} freq={f}')",
+    "",
+    "NUM_MERGES = 12",
+    "merge_history = []",
+    "",
+    "print(f'\\nLearning {NUM_MERGES} BPE merge rules...')",
+    "for step in range(NUM_MERGES):",
+    "    pairs = get_pairs(vocab)",
+    "    if not pairs: break",
+    "    best = max(pairs, key=pairs.get)",
+    "    freq = pairs[best]",
+    "    merge_history.append((best, freq))",
+    "    vocab = merge_vocab(best, vocab)",
+    "    new_token = ''.join(best)",
+    "    print(f'  Step {step+1:2d}: merge {best[0]!r:6s} + {best[1]!r:8s} -> {new_token!r:12s}  (freq={freq})')",
+    "",
+    "print('\\nFinal vocabulary tokens:')",
+    "final_tokens = set()",
+    "for word in vocab:",
+    "    final_tokens.update(word.split())",
+    "print(sorted(final_tokens))",
+    "",
+    "# ── Tokenise a new word using learned merges ──",
+    "def bpe_tokenise(word, merge_history):",
+    "    tokens = list(word) + ['</w>']",
+    "    for (a, b), _ in merge_history:",
+    "        i = 0",
+    "        new_tokens = []",
+    "        while i < len(tokens):",
+    "            if i < len(tokens)-1 and tokens[i]==a and tokens[i+1]==b:",
+    "                new_tokens.append(a+b)",
+    "                i += 2",
+    "            else:",
+    "                new_tokens.append(tokens[i])",
+    "                i += 1",
+    "        tokens = new_tokens",
+    "    return tokens",
+    "",
+    "test_words = ['run', 'running', 'hugs', 'bugs', 'unknown']",
+    "print('\\nTokenising test words:')",
+    "for w in test_words:",
+    "    toks = bpe_tokenise(w, merge_history)",
+    "    print(f'  {w:12s} -> {toks}')",
+    "",
+    "# ── Visualise merge frequency history ──",
+    "fig, ax = plt.subplots(figsize=(10, 4))",
+    "fig.patch.set_facecolor('#0f0f1a'); ax.set_facecolor('#13131f')",
+    "freqs = [f for _, f in merge_history]",
+    "labels = [f'{a}+{b}' for (a,b),_ in merge_history]",
+    "bars = ax.bar(range(len(freqs)), freqs, color='#4ecdc4', alpha=0.85)",
+    "ax.set_xticks(range(len(labels)))",
+    "ax.set_xticklabels(labels, rotation=45, ha='right', color='white', fontsize=9)",
+    "ax.set_ylabel('Merge frequency', color='#aaa')",
+    "ax.set_title(f'BPE: Merge Frequency by Step (top {NUM_MERGES} merges)', color='white')",
+    "ax.tick_params(colors='#aaa')",
+    "for sp in ax.spines.values(): sp.set_color('#333')",
+    "plt.tight_layout()",
+    "plt.savefig('llm_basic/assets/06_bpe_merges.png', dpi=150, bbox_inches='tight', facecolor='#0f0f1a')",
+    "plt.show()",
+])
+cells.append(code(bpe_code))
+
+# ── Interview Q&A ─────────────────────────────────────────────────────────────
+cells.append(md(
+    "## Interview Q&A\n\n"
+    "**Q1: What is the main difference between BPE and WordPiece?**\n"
+    "> Both are bottom-up subword algorithms that merge character pairs. "
+    "The key difference is the merge criterion. BPE selects the pair with the **highest raw frequency** "
+    "in the corpus. WordPiece selects the pair that **maximises the language model likelihood** — "
+    "specifically, it measures mutual information: freq(AB) / (freq(A) × freq(B)). "
+    "WordPiece prefers pairs where the merged token carries more information than its parts separately. "
+    "In practice, both produce similar vocabularies, but WordPiece tends to keep more linguistically "
+    "motivated subwords.\n\n"
+    "---\n\n"
+    "**Q2: Why doesn't SentencePiece require pre-tokenisation?**\n"
+    "> BPE/WordPiece start by splitting text on whitespace — this pre-tokenisation assumes spaces mark "
+    "word boundaries, which is not true in Chinese, Japanese, Thai, or other languages. "
+    "SentencePiece treats raw Unicode as a character sequence, representing spaces with the special "
+    "character '▁'. This makes it fully language-agnostic — the same algorithm works on any language "
+    "without requiring a separate word boundary detector.\n\n"
+    "---\n\n"
+    "**Q3: Why do LLMs sometimes fail at simple arithmetic?**\n"
+    "> Primarily because of tokenisation. Consider '12345' — it may tokenise as ['123', '45']. "
+    "The model has never seen these specific token groupings in alignment with their positional "
+    "significance. When doing addition, the model can't easily 'look at the ones column' because "
+    "the digit groupings in tokens don't align with decimal place values. "
+    "Chain-of-thought prompting helps by making the model write out intermediate steps as text.\n\n"
+    "---\n\n"
+    "**Q4: What is 'fertility' and why does it matter for cross-lingual models?**\n"
+    "> Fertility is the average number of tokens per word for a given language with a given tokeniser. "
+    "A tokeniser trained mostly on English (like GPT-2's BPE) has low fertility for English (~1.2) "
+    "but high fertility for Turkish (~4-5). This means the same 512-token context window fits far "
+    "fewer Turkish words than English words — the model is effectively more 'myopic' in other "
+    "languages. Multilingual models like mBERT, mT5, and LLaMA use balanced multilingual training "
+    "data for the tokeniser to keep fertility more uniform across languages.\n\n"
+    "---\n\n"
+    "**Q5: What vocabulary size should a model use — and why?**\n"
+    "> This is an empirical trade-off: "
+    "(1) **Too small** (e.g., V=1K): extreme fertility, very long sequences, high OOV rate. "
+    "(2) **Too large** (e.g., V=1M): low fertility but the embedding table (V × d) becomes "
+    "enormous — for d=4096, a 1M vocabulary adds 4B parameters just for embeddings. "
+    "Most LLMs use 32K–128K: GPT-3 uses 50,257 (BPE), LLaMA-2 uses 32,000 (SentencePiece), "
+    "GPT-4 reportedly uses ~100K. Larger models trained on more data tend to benefit from "
+    "larger vocabularies since they can learn more token-level patterns.\n\n"
+    "---\n\n"
+    "**Q6: How does WordPiece handle a completely new word like 'SARS-CoV-2'?**\n"
+    "> WordPiece (like most subword tokenisers) handles OOV words by falling back to "
+    "smaller known subwords. 'SARS-CoV-2' would be tokenised using whatever subword units "
+    "are in the vocabulary: e.g., ['SAR', '##S', '-', 'Co', '##V', '-', '2'] or similar. "
+    "Even if the exact word was never seen, the model gets a reasonable representation from "
+    "the component subwords. This is far better than mapping the whole word to [UNK]."
+))
+
+nb.cells = cells
+nbf.write(nb, 'llm_basic/06_tokenisation.ipynb')
+print(f"Written: llm_basic/06_tokenisation.ipynb  ({len(cells)} cells)")
