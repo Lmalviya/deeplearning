@@ -21,3 +21,90 @@ The complete list from the JD:
 
 Honest answer: Mastering all of this in 2 days → NOT possible.
 Being interview-ready to speak confidently → POSSIBLE.
+
+
+
+DAY 1 — FOUNDATION (most critical, do not skip)
+  ├── LLM training stack overview
+  │    Pretraining → SFT → Alignment → Inference
+  │    Why each stage exists, what happens if skipped
+  │
+  └── SFT deep dive
+       Instruction templates, data format
+       LoRA vs QLoRA vs full fine-tune decision framework
+       When to use each — this is a common interview question
+
+DAY 2 — ALIGNMENT
+  ├── DPO — intuition, data format, when to use
+  ├── GRPO — what it is, why DeepSeek used it
+  ├── ORPO — why it is elegant for limited data
+  └── Decision framework: PPO vs DPO vs GRPO vs ORPO
+       When does each make sense — interview gold
+
+DAY 3 — INDIC LANGUAGE + HINGLISH PIPELINE
+  ├── What changes vs English-only pipeline
+  ├── Tokenizer fertility (you already know this deeply)
+  ├── Code-switching handling
+  ├── Relevant datasets for Hinglish
+  └── Connect to your NER experience — bridge building
+
+DAY 4 — DISTRIBUTED TRAINING + INFERENCE
+  ├── DeepSpeed ZeRO stages 1, 2, 3 — intuition only
+  ├── FSDP vs DeepSpeed — when to use which
+  ├── Quantization: AWQ vs GPTQ vs bnb
+  ├── vLLM vs TGI — serving trade-offs
+  └── KV cache, PagedAttention, continuous batching
+
+DAY 5 — EVALUATION + MOCK INTERVIEW
+  ├── Offline vs online evaluation
+  ├── Tool calling accuracy metrics
+  ├── Multilingual benchmarks
+  ├── Regression testing strategy
+  └── Full mock system design:
+       "Design fine-tuning pipeline for
+        tool calling + Indic language"
+       Practice out loud, time yourself
+
+
+Notes Generation Instruction Template
+
+Generate notes for [PHASE NAME] with the following context:
+
+ABOUT ME:
+- Background: ML/DS with experience in training
+  and fine-tuning models for NLP tasks
+- Experience level: Understand training pipelines deeply,
+  new to LLM-specific concepts
+- Target role: Data Scientist / Research Scientist
+  Indic LLM + Hinglish
+- JD Focus: Indic languages, code-switching, instruction
+  following, tool calling, latency, production deployability
+
+CONSTRAINTS:
+- Markdown format
+- LaTeX for math equations (wrap in $$ for block, $ for inline)
+- Python code only if necessary, keep under 15 lines
+- Short enough to revise in 30 minutes
+- Include Interview Answer block for every major concept
+- Include Quick Reference Summary at the end of each phase
+
+CONTENT RULES:
+- Focus on intuition first, math second
+- Include trade-offs for every major decision
+- Include "challenges if building yourself
+  as individual contributor" section
+- Do NOT repeat content from previous phases
+  (reference them instead)
+- Every concept must answer three questions:
+  WHAT is it → WHY it exists → WHEN to use it
+
+PREVIOUS PHASES COVERED:
+[list phases already completed so no repetition]
+
+PREVIOUS DECISIONS MADE IN THIS CONVERSATION:
+[paste any specific decisions or clarifications
+ made during the teaching session for this phase]
+
+PHASE SPECIFIC NOTES:
+[paste any corrections, clarifications, or
+ extra points raised during the Q&A for this phase]

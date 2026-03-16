@@ -1,0 +1,86 @@
+Quantization: https://newsletter.maartengrootendorst.com/p/a-visual-guide-to-quantization#footnote-1-145531349
+Quantization method comaprision: https://newsletter.maartengrootendorst.com/p/which-quantization-method-is-right
+
+
+PPO:
+1. Blog: https://cameronrwolfe.substack.com/p/ppo-llm
+2. Blog: https://cameronrwolfe.substack.com/p/proximal-policy-optimization-ppo
+3. Derivation: https://huggingface.co/blog/garg-aayush/ppo-from-first-principle
+
+DPO:
+1. huggingface: https://huggingface.co/docs/trl/dpo_trainer
+2. Blog: https://cameronrwolfe.substack.com/p/direct-preference-optimization
+
+GRPO: 
+1. Blog: https://cameronrwolfe.substack.com/p/grpo
+2. Blog: https://cameronrwolfe.substack.com/p/grpo-tricks
+3. Derivation: https://huggingface.co/blog/garg-aayush/derive-grpo-loss
+4. code: https://github.com/garg-aayush/building-from-scratch/tree/main/grpo
+
+ORPO:
+1. Blog: https://mltimes.se/blog/orpo-redefine-rlhf/
+2. Code: https://huggingface.co/blog/mlabonne/orpo-llama-3
+
+DeepSeepd:
+1. https://huggingface.co/docs/accelerate/en/usage_guides/deepspeed
+2. Blog: https://medium.com/@hayagriva99999/deepspeed-under-the-hood-revolutionising-ai-with-large-scale-model-training-827cf88866d5
+
+
+Model Parallelism:
+1. https://huggingface.co/docs/transformers/v4.13.0/en/parallelism
+2. Video: https://www.youtube.com/watch?v=1bxTUv-F8K4
+3. https://theaisummer.com/distributed-training-pytorch/
+
+Data Parallelism:
+1. https://siboehm.com/articles/22/data-parallel-training
+2. blog: https://levelup.gitconnected.com/distributed-data-parallelism-ddp-5fe2134b6fd7
+
+mixed precision training:
+1. https://blog.dailydoseofds.com/p/mixed-precision-training
+2. https://medium.com/data-science/understanding-mixed-precision-training-4b246679c7c4
+
+Gradient Checkpointing:
+1. https://blog.dailydoseofds.com/p/gradient-checkpointing-save-50-60
+2. https://www.newline.co/@zaoyang/fine-tuning-llms-with-gradient-checkpointing-and-partitioning--42a48e66
+3. https://pytorch.org/blog/activation-checkpointing-techniques/
+
+
+Continuous Batching (inference optimization method):
+1. https://www.youtube.com/watch?v=PqHVpvvHLpE&t=54s
+2. https://medium.com/@akdemir_bahadir/continuous-batching-in-llm-inference-d24182b21bdf
+3. https://huggingface.co/blog/continuous_batching
+
+Paged Attention (inference optimization method):
+1. https://hamzaelshafie.bearblog.dev/paged-attention-from-first-principles-a-view-inside-vllm/
+2. https://www.youtube.com/watch?v=yHAcgyntYDQ
+3. https://docs.vllm.ai/en/latest/design/paged_attention/#value
+
+
+KV Caching:
+1. https://magazine.sebastianraschka.com/p/coding-the-kv-cache-in-llms
+
+
+Attention and their types:
+1. https://magazine.sebastianraschka.com/p/understanding-and-coding-self-attention
+
+
+Reasoning models:
+1. https://magazine.sebastianraschka.com/p/understanding-reasoning-llms
+
+
+GPT OSS Model:
+1. https://magazine.sebastianraschka.com/p/from-gpt-2-to-gpt-oss-analyzing-the
+
+
+Multi-Modal Models:
+1. https://magazine.sebastianraschka.com/p/understanding-multimodal-llms
+
+Speculative Decoding:
+1. https://medium.com/@akdemir_bahadir/speculative-decoding-how-to-make-large-language-models-think-faster-without-sacrificing-quality-bcdc24711c38
+2. https://pytorch.org/blog/hitchhikers-guide-speculative-decoding/
+3. https://vllm.ai/blog/spec-decode
+
+
+Constrained Decoding:
+1. https://huggingface.co/blog/constrained-beam-search
+2. https://mbrenndoerfer.com/writing/constrained-decoding-structured-llm-output
