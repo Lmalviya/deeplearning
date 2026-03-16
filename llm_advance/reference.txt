@@ -36,6 +36,7 @@ Data Parallelism:
 2. blog: https://levelup.gitconnected.com/distributed-data-parallelism-ddp-5fe2134b6fd7
 
 mixed precision training:
+0. https://www.youtube.com/watch?v=hHpC9Sywh4U
 1. https://blog.dailydoseofds.com/p/mixed-precision-training
 2. https://medium.com/data-science/understanding-mixed-precision-training-4b246679c7c4
 
@@ -84,3 +85,39 @@ Speculative Decoding:
 Constrained Decoding:
 1. https://huggingface.co/blog/constrained-beam-search
 2. https://mbrenndoerfer.com/writing/constrained-decoding-structured-llm-output
+
+
+Transformers:
+1. Theory: https://www.youtube.com/watch?v=bCz4OMemCcA&t=1764s
+2. Code: https://www.youtube.com/watch?v=ISNdQcPhsts
+
+
+Bert Model Explained:
+1. https://www.youtube.com/watch?v=90mGPxR2GgY
+
+Llama 2 architecture:
+1. https://www.youtube.com/watch?v=Mn_9W1nCFLo
+2. https://cameronrwolfe.substack.com/p/llama-2-from-the-ground-up
+
+Mistral Model Architectures:
+1. https://www.youtube.com/watch?v=UiX8K-xBUpE
+
+
+LLM Architectures Comparison:
+1. https://magazine.sebastianraschka.com/p/the-big-llm-architecture-comparison
+
+
+clip Model
+1. https://blog.bytebytego.com/p/openai-clip-the-model-that-learnt
+
+
+sentence Transformers:
+1. training: https://huggingface.co/blog/train-sentence-transformers
+2. code: https://www.youtube.com/watch?v=nZ5j289WN8g
+
+Seq-to-Seq model with attention:
+1. https://jalammar.github.io/visualizing-neural-machine-translation-mechanics-of-seq2seq-models-with-attention/
+
+
+
+Mixed Precision Training
