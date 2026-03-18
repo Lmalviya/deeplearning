@@ -63,7 +63,7 @@ KV Caching:
 
 Attention and their types:
 1. https://magazine.sebastianraschka.com/p/understanding-and-coding-self-attention
-
+2. https://www.youtube.com/watch?v=Y-o545eYjXM
 
 Reasoning models:
 1. https://magazine.sebastianraschka.com/p/understanding-reasoning-llms
@@ -92,6 +92,8 @@ Transformers:
 2. Code: https://www.youtube.com/watch?v=ISNdQcPhsts
 
 
+
+
 Bert Model Explained:
 1. https://www.youtube.com/watch?v=90mGPxR2GgY
 
@@ -101,6 +103,9 @@ Llama 2 architecture:
 
 Mistral Model Architectures:
 1. https://www.youtube.com/watch?v=UiX8K-xBUpE
+Mixture of Experts (MoE):
+1. https://www.youtube.com/watch?v=0QQlYR1r6pQ
+2. https://www.youtube.com/watch?v=sOPDGQjFcuM
 
 
 LLM Architectures Comparison:
