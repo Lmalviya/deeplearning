@@ -57,14 +57,6 @@ Paged Attention (inference optimization method):
 3. https://docs.vllm.ai/en/latest/design/paged_attention/#value
 
 
-KV Caching:
-1. https://magazine.sebastianraschka.com/p/coding-the-kv-cache-in-llms
-
-
-Attention and their types:
-1. https://magazine.sebastianraschka.com/p/understanding-and-coding-self-attention
-2. https://www.youtube.com/watch?v=Y-o545eYjXM
-
 Reasoning models:
 1. https://magazine.sebastianraschka.com/p/understanding-reasoning-llms
 
@@ -87,29 +79,6 @@ Constrained Decoding:
 2. https://mbrenndoerfer.com/writing/constrained-decoding-structured-llm-output
 
 
-Transformers:
-1. Theory: https://www.youtube.com/watch?v=bCz4OMemCcA&t=1764s
-2. Code: https://www.youtube.com/watch?v=ISNdQcPhsts
-
-
-
-
-Bert Model Explained:
-1. https://www.youtube.com/watch?v=90mGPxR2GgY
-
-Llama 2 architecture:
-1. https://www.youtube.com/watch?v=Mn_9W1nCFLo
-2. https://cameronrwolfe.substack.com/p/llama-2-from-the-ground-up
-
-Mistral Model Architectures:
-1. https://www.youtube.com/watch?v=UiX8K-xBUpE
-Mixture of Experts (MoE):
-1. https://www.youtube.com/watch?v=0QQlYR1r6pQ
-2. https://www.youtube.com/watch?v=sOPDGQjFcuM
-
-
-LLM Architectures Comparison:
-1. https://magazine.sebastianraschka.com/p/the-big-llm-architecture-comparison
 
 
 clip Model
