@@ -64,7 +64,7 @@ Think of it as upgrading each stage of the pipeline:
 
 ---
 
-### 3. Modular / Self-RAG
+### <a href="https://arxiv.org/pdf/2310.11511" target="_blank">3. Modular / Self-RAG</a>
 
 The key insight of Self-RAG (Asai et al., 2023) is: not every query needs retrieval.
 
@@ -75,6 +75,10 @@ Self-RAG introduces **reflection tokens** — special tokens the LLM generates t
 - Is the retrieved content actually relevant? (ISSUP token)
 - Is my generated answer supported by the retrieved content? (ISUSE token)
 
+<p align="center">
+  <img src=".\assets\types_of_token_self_rag.png" alt="Centered Image", width="600">
+</p>
+
 The model essentially critiques its own retrieval and generation in real time.
 
 **What this means in practice:** The system becomes adaptive. It retrieves when needed, skips retrieval when not, and can flag when the retrieved context is insufficient.
@@ -83,7 +87,7 @@ Self-RAG requires a specially trained model that understands these reflection to
 
 ---
 
-### 4. Corrective RAG (CRAG)
+### <a href="https://arxiv.org/pdf/2401.15884" target="_blank">4. Corrective RAG (CRAG)</a>
 
 CRAG (Shi et al., 2024) addresses a specific failure mode: what happens when the retrieved documents are wrong or irrelevant?
 
@@ -139,7 +143,7 @@ Agentic RAG is the right choice when queries are complex, multi-step, or require
 
 ---
 
-### 6. Graph RAG
+### <a href="https://arxiv.org/pdf/2501.00309" target="_blank">6. Graph RAG</a>
 
 Graph RAG (Edge et al., Microsoft, 2024) solves a problem that vector search fundamentally cannot: **reasoning over relationships between entities across many documents.**
 
