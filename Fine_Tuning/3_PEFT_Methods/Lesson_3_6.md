@@ -9,10 +9,22 @@
 LoRA is not perfect. It has three known limitations that motivated follow-on research:
 
 1. **LoRA only adapts the direction of weight updates, not the magnitude.** A weight matrix encodes both *how much* to activate (magnitude) and *in which direction* to activate (direction). LoRA's low-rank ΔW = BA changes direction but not magnitude independently. Full fine-tuning naturally adapts both.
+```
+LoRA approximates weight updates using two smaller matrices, $B$ and $A$, where $\Delta W = BA$. Because these matrices are highly constrained (low-rank), they are structurally biased toward changing the direction of the weights. LoRA lacks the ability to scale the magnitude of the weights independently. If a specific feature needs to be amplified significantly without altering its direction, LoRA struggles to do this efficiently compared to full fine-tuning
+```
 
 2. **LoRA still has a non-trivial parameter count** at higher ranks. For scenarios with very limited data (few-shot) or extreme memory constraints, even 10–20M trainable LoRA params is too many.
+```
+If you are adapting a massive model (e.g., a 70-billion parameter model) or targeting all linear layers to maximize accuracy, even a modest rank like $r=16$ or $r=32$ can quickly add up to 10 million to 50 million trainable parameters.For standard GPUs, this is fine.For extreme edge devices (like smartphones), or extreme few-shot learning (where you only have 5–10 examples and the model will easily overfit), 20 million parameters is still far too heavy and unstable
+```
 
 3. **QLoRA's initialization leaves quantization error uncompensated.** QLoRA initializes B=0, meaning LoRA starts adding zero correction to a model that is already perturbed by 4-bit quantization error. It has to spend training budget compensating for that initial error.
+```
+Quantization is inherently lossy; compressing a model from 16-bit to 4-bit introduces "quantization noise" or error, slightly degrading the model's intelligence right out of the gate.
+
+QLoRA initializes its LoRA matrices such that $B=0$ and $A$ is random, meaning $\Delta W = 0 \times A = 0$. On step zero of training, the LoRA adapter contributes absolutely nothing. The model is forced to start training on a degraded, noisy 4-bit base. The first several hundred steps of training budget are effectively wasted just trying to "correct" the damage done by quantization, rather than learning the actual target task.
+```
+
 
 DoRA, IA³, and LoftQ each address one of these problems directly.
 

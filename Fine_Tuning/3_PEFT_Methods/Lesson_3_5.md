@@ -1,6 +1,8 @@
 # Lesson 3.5 — QLoRA: 4-Bit Quantization + LoRA, and How It Fits 65B Training on One GPU
 
 > *This lesson builds directly on Lesson 3.4. Understand LoRA first — QLoRA is LoRA with the base model compressed. The compression technique is what this lesson is about.*
+>
+> *If you want a deep understanding of **how quantization works** — the full mechanics of INT8, GPTQ, AWQ, and NF4, and why naive quantization fails — read **Lesson 3.5A: Quantization Deep Dive** alongside this lesson. This lesson covers the QLoRA system; 3.5A covers the quantization foundation it stands on.*
 
 ---
 
