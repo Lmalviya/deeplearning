@@ -2,6 +2,7 @@
 
 > **The interview question this answers:** "Walk me through how you would deploy your fine-tuned model on AWS SageMaker."
 
+Video: https://www.youtube.com/watch?v=pzs3UgR6gpk
 ---
 
 ## Three Deployment Paths
