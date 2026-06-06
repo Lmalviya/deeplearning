@@ -38,6 +38,19 @@ If each factor ≈ 1.5:    1.5¹⁰⁰ ≈ 10⁶      →  gradient explodes
 
 ## The Two Problems
 
+---
+
+When you multiply a matrix W by a special vector v, something interesting happens — the vector doesn't rotate, it only stretches or shrinks:
+W⋅v=λvW \cdot v = \lambda vW⋅v=λv
+That λ is the eigenvalue. It tells you how much the matrix scales that vector.
+
+λ = 2 → vector doubles in magnitude
+λ = 0.5 → vector halves in magnitude
+λ = 1 → vector unchanged
+λ = -0.5 → vector flips direction and halves
+
+---
+
 ### Vanishing Gradients
 
 When the eigenvalues of `Wₕ` are less than 1 (and tanh derivatives are small), the gradient product shrinks exponentially with sequence length. After 20–30 steps, the gradient reaching the early time steps is so small it might as well be zero.
@@ -54,6 +67,10 @@ This is why vanilla RNNs fail at tasks like:
 When the eigenvalues of `Wₕ` are greater than 1, the gradient product grows exponentially. After ~20–30 steps, the gradient is astronomically large. The weight update becomes enormous and the model diverges — loss spikes to NaN or infinity.
 
 **What this means in practice:** Training becomes numerically unstable. The model weights jump wildly from one step to the next.
+
+---
+
+"In an RNN the same weight matrix Wh is applied at every timestep. During backpropagation, the gradient has to travel back through every single timestep — and at each step it gets multiplied by Wh and the activation derivative. If those values are less than 1, the gradient shrinks exponentially with sequence length — after 20-30 steps it's basically zero, so early timesteps get no learning signal. This is vanishing gradient. If those values are greater than 1, the gradient explodes exponentially — weights get catastrophically large updates and training collapses."
 
 ---
 
