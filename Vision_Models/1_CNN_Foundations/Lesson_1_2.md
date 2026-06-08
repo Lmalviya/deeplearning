@@ -119,9 +119,20 @@ A 2-layer CNN cannot distinguish these — the receptive field is too small and 
 > **Interview note:** *"Why does max pooling help with translation invariance?"*
 > If a feature appears anywhere within the pooling window, the max value captures it — regardless of its exact position within the window. Shift an image by 1 pixel: the feature moves slightly within the window but the max value is the same. For larger translations, multiple pools compound this: after two 2×2 pools, a 4-pixel shift is absorbed. Translation invariance is approximate and local — it applies within the pooling window, not globally. Global average pooling provides full global invariance.
 
+How CNN achieves this — the secret is Pooling:
+
+The Conv layer slides its filters across the entire image and detects features (ears, eyes, whiskers) wherever they are.
+This creates a feature map — "I found whiskers at position (45, 60)"
+Max Pooling then asks: "Did whiskers appear anywhere in this region?" — it throws away the exact coordinates and just keeps the answer YES/NO.
+By repeating this, the network loses track of "where" but retains "what" — that's translation invariance.
+
+
 > **Interview note:** *"Why do modern CNNs prefer two stacked 3×3 filters over one 5×5 filter?"*
 > Same effective receptive field (5×5), but two 3×3 layers have `2 × 3×3 = 18` parameter units per channel pair vs `5×5 = 25` for one 5×5 layer — roughly 28% fewer parameters. More importantly, two 3×3 layers have two ReLU nonlinearities, making the representation more expressive. This insight, popularized by VGG (2014), is why almost all modern CNNs use 3×3 filters.
 
+
+> What is Receptive Field ?
+> The receptive field is the region of the input image that a particular neuron in a CNN 'looks at' or is influenced by when computing its output
 ---
 
 ## Summary
