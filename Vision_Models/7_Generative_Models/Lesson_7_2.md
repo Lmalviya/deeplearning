@@ -108,6 +108,12 @@ This reduces the labeling bottleneck for new product launches.
 
 ---
 
+GAN uses two separate loss functions based on Binary Cross Entropy. The discriminator minimises a two-term loss — one for correctly labelling real images as real, and one for labelling fake images as fake. The generator minimises a one-term loss — it only cares about making the discriminator believe its fake images are real. In practice we use the non-saturating form for the generator, which is -log(D(G(z))) instead of log(1 - D(G(z))), because the original formula gives near-zero gradients early in training when the generator is weak.
+
+-> Instead of minimising log(1-D(G(z))), we MAXIMISE log(D(G(z))), i.e. minimise -log(D(G(z))). Same goal, but much stronger gradients early in training.
+
+---
+
 > **Interview note:** *"What is mode collapse in a GAN, and how do you fix it?"*
 > Mode collapse: the generator converges to producing only a few types of outputs (modes) that fool the discriminator, ignoring the full diversity of the data distribution. For example, a GAN trained on 1,000 shoe styles generates only one style endlessly.
 > Fixes: (1) Minibatch discrimination — let the discriminator see statistics across the batch, so it can detect lack of diversity. (2) Wasserstein loss (WGAN) — replaces the binary real/fake classifier with a continuous "critic" score; WGAN loss provides meaningful gradients even when the distributions are non-overlapping, making training smoother. (3) Training schedule — train G more steps per D step when D dominates.
