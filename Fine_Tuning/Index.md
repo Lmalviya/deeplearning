@@ -64,12 +64,19 @@
 
 ## Part 6 — The WHAT Axis: Alignment Methods
 
-**Lesson 6.1** — Why alignment is needed: the gap between "predicts next tokens" and "follows human intent" — RLHF motivation and the reward hacking problem \
-**Lesson 6.2** — RLHF with PPO: reward model training, the PPO loop step by step, KL penalty, why PPO is complex and unstable \
-**Lesson 6.3** — DPO (Direct Preference Optimization): how it bypasses the reward model, the math intuition (implicit reward), why it is simpler and more stable than PPO \
-**Lesson 6.4** — ORPO (Odds Ratio Preference Optimization): combining SFT loss + preference loss in one step, why it is efficient, when to prefer it over DPO \
-**Lesson 6.5** — Other alignment methods: SimPO (reference-free DPO), KTO (binary feedback instead of pairs), IPO (identity preference optimization) — the landscape \
-**Lesson 6.6** — Alignment method comparison: data requirements, compute cost, training stability, performance — the decision matrix
+> **This part is fully self-contained.** It builds from first principles — no prior knowledge of RL or statistics is assumed. Read the lessons in order.
+
+**Lesson 6.1** — Why alignment is needed: the gap between "predicts next tokens" and "follows human intent" — what SFT cannot solve and why a reward signal is necessary \
+**Lesson 6.2** — RL foundations for alignment: policy, state, action, reward, episode, trajectory — the exact RL vocabulary used in every alignment algorithm, scoped to LLMs \
+**Lesson 6.3** — KL divergence in alignment: what it measures, forward vs reverse KL, why the KL penalty is non-optional, the β hyperparameter — the math every alignment paper assumes you know \
+**Lesson 6.4** — Reward models: how human preferences become a trainable signal — preference pairs, the Bradley-Terry model, reward model training pipeline, reward score distribution, and model limitations \
+**Lesson 6.5** — Reward hacking: Goodhart's Law in ML, the over-optimization curve, how models exploit reward models, and the mitigation strategies (KL penalty, ensemble reward models, constitutional AI) \
+**Lesson 6.6** — RLHF with PPO: the full 4-phase training loop (rollout → score → advantage → clipped update), actor-critic setup, KL constraint, why PPO is powerful but complex and unstable \
+**Lesson 6.7** — DPO (Direct Preference Optimization): the analytical derivation from the PPO objective, implicit reward as log ratio, how it bypasses the reward model, training setup, stability vs PPO \
+**Lesson 6.8** — GRPO (Group Relative Policy Optimization): group sampling, normalized group advantage, eliminating the critic network, verifiable reward signals, the DeepSeek-R1 connection \
+**Lesson 6.9** — ORPO (Odds Ratio Preference Optimization): combining SFT loss + odds ratio preference loss in a single training pass, no reference model, when to prefer over DPO \
+**Lesson 6.10** — Other alignment methods: SimPO (reference-free DPO with length normalization), KTO (binary feedback without preference pairs), IPO (identity preference optimization, avoiding over-fitting to margins) — when each is the right choice \
+**Lesson 6.11** — Alignment method comparison: data requirements, compute cost, number of models needed, training stability, performance — the full decision matrix for choosing between PPO / DPO / GRPO / ORPO / SimPO / KTO
 
 ---
 
