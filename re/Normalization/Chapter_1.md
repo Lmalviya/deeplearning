@@ -305,53 +305,176 @@ Object detection, segmentation, any vision task where batch size is constrained 
 
 ---
 
-## 5. Which Axes? — The Unifying View
+## 5. RMS Normalization
+
+**Paper:** Zhang & Sennrich, 2019 — adopted by LLaMA, Mistral, Gemma, and most modern LLMs.
+
+### The Problem LayerNorm Has
+
+LayerNorm computes two statistics per token: **mean** (re-centering) and **variance** (re-scaling). But look at what it actually does:
+- Subtracting the mean shifts the distribution to be zero-centered
+- Dividing by the standard deviation controls the scale
+
+The question is: **is re-centering actually necessary?** The hypothesis behind RMSNorm is that the re-scaling part (controlling variance/scale) is where the real stabilization comes from. The mean subtraction is redundant overhead — it costs compute and adds a mean-estimation step that introduces its own noise.
+
+At scale — billions of parameters, trillions of tokens — redundant operations matter. Every LayerNorm call inside every Transformer block, repeated across thousands of training steps, adds up.
+
+### The Idea
+
+Drop the mean. Normalize only by the **Root Mean Square** of the activations — measure scale, divide by it, done.
+
+For a single token vector of size V:
+
+$$\text{RMS}(x) = \sqrt{\frac{1}{V}\sum_{v=1}^{V} x_v^2}$$
+
+$$\hat{x}_v = \frac{x_v}{\text{RMS}(x)}$$
+
+Then apply a learnable scale (but **no shift β**):
+
+$$y_v = \gamma_v \cdot \hat{x}_v$$
+
+Two simplifications relative to LayerNorm:
+1. **No mean subtraction** — don't compute μ, don't subtract it
+2. **No β parameter** — no additive bias term
+
+γ is still a learnable vector of size V — one gain per feature. The network can still learn to rescale each feature dimension. It just can't shift the mean, which empirically doesn't matter.
+
+### Where RMSNorm Normalizes
+
+```
+Tensor: [B, N, V]
+
+For each token (each b, n position), normalize across V:
+
+  B=1, N=1: [■ ■ ■ ■ ■ ■ ■ ■]  ← compute RMS over these V values, divide each
+  B=1, N=2: [■ ■ ■ ■ ■ ■ ■ ■]  ← independently
+  B=2, N=1: [■ ■ ■ ■ ■ ■ ■ ■]  ← independently
+              V →
+
+Same axes as LayerNorm — but no mean subtraction step.
+```
+
+### The Math: LayerNorm vs RMSNorm Side by Side
+
+| Step | LayerNorm | RMSNorm |
+|---|---|---|
+| Compute mean | $\mu = \frac{1}{V}\sum x_v$ | — (skipped) |
+| Center | $x - \mu$ | — (skipped) |
+| Compute scale | $\sigma = \sqrt{\frac{1}{V}\sum(x_v - \mu)^2 + \epsilon}$ | $\text{RMS} = \sqrt{\frac{1}{V}\sum x_v^2 + \epsilon}$ |
+| Normalize | $\hat{x} = (x-\mu)/\sigma$ | $\hat{x} = x / \text{RMS}$ |
+| Scale | $\gamma \hat{x}$ | $\gamma \hat{x}$ |
+| Shift | $+ \beta$ | — (no β) |
+
+RMSNorm is LayerNorm minus two operations. Same output shape, fewer FLOPs.
+
+### Why Removing the Mean Works
+
+The key insight is that Transformer blocks already have enough mechanisms to control mean activations — residual connections accumulate values across layers, and the feed-forward sublayers have bias terms that can shift distributions. The mean subtraction in LayerNorm turns out to be largely redundant. Empirical results in the original paper show that RMSNorm matches LayerNorm quality while being measurably faster.
+
+Further, for LLMs with Pre-LN placement, the residual stream already carries a well-behaved running sum. The crucial property needed is **scale invariance** — making outputs insensitive to the magnitude of inputs — not zero-centering.
+
+### RMSNorm in Practice
+
+```python
+import torch
+import torch.nn as nn
+
+class RMSNorm(nn.Module):
+    def __init__(self, dim: int, eps: float = 1e-6):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(dim))  # γ, no β
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: [B, N, V]
+        rms = x.pow(2).mean(dim=-1, keepdim=True).add(self.eps).sqrt()
+        return self.weight * (x / rms)
+```
+
+Compare this to `nn.LayerNorm` — same interface, simpler internals, no running statistics.
+
+**Where it's used:**
+- **LLaMA** (all versions) — replaces all LayerNorm with RMSNorm
+- **Mistral, Mixtral** — RMSNorm throughout
+- **Gemma** — RMSNorm
+- **Falcon, Qwen** — RMSNorm
+- GPT-style models still use LayerNorm; T5 switched to a variant of RMSNorm
+
+### The ε Term
+
+Same as LayerNorm — ε is a small constant (typically 1e-6 or 1e-5) added inside the square root to prevent division by zero when activations are near zero. The exact value matters less than its presence.
+
+### Pros and Cons
+
+| Pros | Cons |
+|---|---|
+| Faster than LayerNorm — fewer FLOPs | No mean subtraction — relies on residual stream to handle bias |
+| Simpler implementation — no β | Slightly less expressive (no learned shift) |
+| Same axes as LayerNorm — works for sequences | Empirically equivalent to LayerNorm but may differ on specific tasks |
+| Batch-size independent | Less studied than LayerNorm in non-LLM settings |
+| Same train/test behavior — no running stats | |
+
+### When to Use
+
+Anywhere you'd use LayerNorm in a Transformer — especially large language models where the speedup compounds across billions of operations. If you're training a new LLM from scratch, RMSNorm is the modern default. For fine-tuning existing models, use whatever normalization the architecture was pretrained with.
+
+---
+
+## 6. Which Axes? — The Unifying View
 
 This is the most important thing to remember. Every normalization is the same formula, different axes.
 
 ```
 Tensor: [B, C, H, W]  or  [B, N, V]
 
-             B        C/V       H,W/N
-             (batch)  (feature) (spatial/sequence)
+              B        C/V       H,W/N
+              (batch)  (feature) (spatial/sequence)
 
-BatchNorm:   ✓                  ✓        normalize ACROSS batch & spatial, PER feature
-LayerNorm:            ✓        ✓        normalize ACROSS features & sequence, PER sample
-InstanceNorm:                   ✓        normalize ACROSS spatial only, PER sample PER channel
-GroupNorm:            ✓*       ✓        normalize ACROSS spatial & channel group, PER sample
+BatchNorm:    ✓                  ✓        normalize ACROSS batch & spatial, PER feature
+LayerNorm:             ✓        ✓        normalize ACROSS features & sequence, PER sample
+InstanceNorm:                    ✓        normalize ACROSS spatial only, PER sample PER channel
+GroupNorm:             ✓*       ✓        normalize ACROSS spatial & channel group, PER sample
+RMSNorm:               ✓        ✓        same axes as LayerNorm — but scale-only, no mean shift
 ```
 
 *within each group
+
+RMSNorm occupies the same position as LayerNorm in this table — same axes, same per-sample independence — but with a simplified computation: no mean, no β.
 
 ```mermaid
 flowchart TD
     A[Need Normalization] --> B{What is your task?}
     
     B -->|Vision / CNN| C{Batch size?}
-    B -->|NLP / Sequence| D[LayerNorm]
+    B -->|NLP / Sequence| D{Training new LLM from scratch?}
     B -->|Style Transfer / GAN| E[InstanceNorm or AdaIN]
     
     C -->|Large batch ≥16| F[BatchNorm]
     C -->|Small batch <8| G[GroupNorm]
     C -->|Medium - unsure| H[GroupNorm safe default]
+
+    D -->|Yes| I[RMSNorm — modern default]
+    D -->|No / fine-tuning| J[LayerNorm — match pretrained arch]
 ```
 
 ---
 
-## 6. Comparison Table
+## 7. Comparison Table
 
-| | BatchNorm | LayerNorm | InstanceNorm | GroupNorm |
-|---|---|---|---|---|
-| Normalize over | B, H, W (per C) | C, N (per B,N) | H, W (per B,C) | C/G, H, W (per B,G) |
-| Batch dependent | Yes | No | No | No |
-| Works at B=1 | No | Yes | Yes | Yes |
-| Train≠Test behavior | Yes (running stats) | No | No | No |
-| Learns γ, β | Yes | Yes | Yes | Yes |
-| Primary use | CNNs | Transformers | Style/GAN | Detection |
+| | BatchNorm | LayerNorm | InstanceNorm | GroupNorm | RMSNorm |
+|---|---|---|---|---|---|
+| Normalize over | B, H, W (per C) | C, N (per B,N) | H, W (per B,C) | C/G, H, W (per B,G) | C, N (per B,N) |
+| Batch dependent | Yes | No | No | No | No |
+| Works at B=1 | No | Yes | Yes | Yes | Yes |
+| Train≠Test behavior | Yes (running stats) | No | No | No | No |
+| Learns γ | Yes | Yes | Yes | Yes | Yes |
+| Learns β | Yes | Yes | Yes | Yes | **No** |
+| Subtracts mean | Yes | Yes | Yes | Yes | **No** |
+| Primary use | CNNs | Transformers | Style/GAN | Detection | Large LLMs |
 
 ---
 
-## 7. Tricky Interview Questions
+## 8. Tricky Interview Questions
 
 **Q: BatchNorm behaves differently at train and test time. Why, and what can go wrong?**
 > During training it uses current batch statistics — mean and variance from the batch. During test time it uses running statistics accumulated during training. If you forget `model.eval()`, the model uses batch statistics at inference — with a single test sample, this produces garbage outputs. Also, if the test distribution shifts from training, running statistics may be stale and wrong.
@@ -373,3 +496,15 @@ flowchart TD
 
 **Q: Does normalization always help? When might it hurt?**
 > Not always. For very small feature dimensions (small V in LayerNorm), statistics from few values are noisy. For tasks requiring the model to distinguish samples by their raw activation scale — some anomaly detection tasks — normalization removes exactly the signal you need. For shallow networks that don't suffer from covariate shift, normalization adds overhead without benefit. And incorrect placement (e.g., normalizing after the final output layer) can constrain the output range and hurt performance.
+
+**Q: What is RMSNorm and how does it differ from LayerNorm?**
+> RMSNorm normalizes by the Root Mean Square of activations rather than the standard deviation. Concretely, it skips two operations that LayerNorm performs: it does not subtract the mean (no re-centering), and it has no learnable shift parameter β. The formula is $\hat{x}_v = x_v / \text{RMS}(x)$, followed by element-wise scaling with γ. The hypothesis is that re-scaling (controlling activation magnitude) is what stabilizes training, and re-centering is redundant overhead. Empirically, RMSNorm matches LayerNorm accuracy while being faster — which matters enormously at LLM scale.
+
+**Q: Why do LLaMA and other modern LLMs prefer RMSNorm over LayerNorm?**
+> Two reasons: speed and simplicity. RMSNorm computes one statistic (RMS) instead of two (mean + variance), and has no β parameter to store or update. In a Transformer with Pre-LN placement, every block has two normalization calls. Across billions of parameters and trillions of training tokens, removing the mean subtraction and β accumulates into real throughput gains. The quality is equivalent — residual connections and feed-forward bias terms handle any mean-shift needs that β previously served.
+
+**Q: If RMSNorm has no β (no shift), can the model still represent any distribution?**
+> Yes, effectively. The γ parameter still gives the model per-feature control over scale. And the bias terms in the linear layers immediately after RMSNorm can absorb any needed shift in the output distribution — β in LayerNorm was redundant with downstream biases. The one genuine constraint is that RMSNorm outputs are always zero-mean (since it only scales, never shifts). But in practice, Transformer architectures don't need normalization to produce non-zero means — the residual stream and subsequent projections handle that.
+
+**Q: When would you still choose LayerNorm over RMSNorm?**
+> When you are fine-tuning or extending a pretrained model that used LayerNorm — mixing normalization types within an architecture creates inconsistencies that can hurt convergence. Also in research settings where you want exact reproducibility with prior work. And potentially in domains outside LLMs where the re-centering property of LayerNorm might help — though evidence for this is sparse.
