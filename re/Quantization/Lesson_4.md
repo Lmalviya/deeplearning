@@ -118,34 +118,19 @@ The LLM.int8() paper (Dettmers et al., 2022) solved the outlier problem with a c
 1. **The outlier dimensions** — compute in FP16 (expensive but only a few dimensions)
 2. **The non-outlier dimensions** — compute in INT8 (efficient, the vast majority)
 
-```
-Input activation X (shape: [batch × seq_len × hidden_dim])
-          │
-          ▼
-    ┌─────────────────────────────────┐
-    │   Decompose by outlier columns  │
-    └─────────────────────────────────┘
-          │
-    ┌─────┴──────┐
-    │            │
-Outlier cols    Non-outlier cols
-(~1% of dims)  (~99% of dims)
-    │                │
-    │                ▼
-    │         INT8 quantize
-    │         INT8 × INT8 matmul
-    │         (fast, hardware accelerated)
-    │                │
-    │                ▼
-    │         Dequantize to FP16
-    │                │
-    └──────┐  ┌──────┘
-           ▼  ▼
-        FP16 addition
-           │
-           ▼
-        FP16 output
-```
+![LLM.int8](./llm_int8.png)
+
+### The Exact Outlier Detection Criteria (From the Paper)
+
+The `threshold: float = 6.0` in the code below is a practical simplification of something the paper actually defines more precisely. A feature dimension only counts as a **systematic outlier** — worth pulling into the FP16 path — if it meets **all three** of these conditions simultaneously:
+
+1. **Magnitude ≥ 6.0** — at least one activation value in that dimension has an absolute value of 6 or larger. (Empirically, perplexity degradation from outliers stopped once any feature crossing this threshold was isolated; going lower gave no further benefit.)
+2. **Present in at least 25% of transformer layers** — the *same* feature dimension index must show this large-magnitude behavior across at least a quarter of all layers, not just once. This is what separates a genuinely systematic outlier from a random one-off spike — in the paper's smallest model (125M params), the most common outlier appeared in ≥25% of layers, while the next most common appeared in only ~2% of layers, giving a clean separation point.
+3. **Present in at least 6% of sequence positions (tokens)** — the same dimension must show the large magnitude across at least 6% of tokens in the sequence, not just a single unusual token.
+
+Only dimensions satisfying **all three** get the FP16 treatment. The code below approximates this with a single per-batch magnitude check (`(x.abs() > threshold).any(dim=(0,1))`) — the practical, runtime version of the same idea. In production, `bitsandbytes` detects outliers dynamically per batch rather than precomputing layer/token statistics offline.
+
+To make "why bother with all this" concrete: at the 6.7B parameter mark, the paper found the same handful of outlier dimensions (as few as 6 total, across the *entire* model) accounted for roughly 150,000 outlier values per sequence. Despite being under 0.1% of all features, zeroing them out was found to degrade validation perplexity by 600–1000% and cut top-1 attention softmax probability mass by more than 20%. That's the empirical justification for treating them specially instead of accepting the error.
 
 ### Implementation
 
@@ -197,6 +182,8 @@ def llm_int8_matmul(
     return out_outlier.to(torch.float16) + out_normal.to(torch.float16)
 ```
 
+> **Terminology check:** the code above is doing **symmetric** quantization (a single scale, range `[-127, 127]`, no zero-point/offset) computed **per-channel for weights** and **per-token for activations**. In the paper, this combination — a separate scale for each row/column involved in the matmul — is called **vector-wise quantization**. If you see that term elsewhere, it refers to exactly this scheme.
+
 ### Using LLM.int8() in Practice
 
 The bitsandbytes library implements LLM.int8() with efficient CUDA kernels:
@@ -232,6 +219,37 @@ for name, module in model.named_modules():
 - **Speed:** Roughly comparable to FP16 on A100 (INT8 matmul speedup offset by decomposition overhead)
 - **Quality:** Near-zero degradation (< 1% on most benchmarks for models ≥ 6.7B)
 - **Threshold parameter:** 6.0 is the recommended default. Higher = fewer outlier dims extracted = faster but more error
+
+---
+
+## INT8 as a Compute Datatype (Not Just Storage)
+
+It's worth being precise about something the code above glosses over: INT8 is unusual among quantized formats because it is genuinely used **for computation**, not only for storage.
+
+- GPU tensor cores have **native hardware support** for INT8 × INT8 matrix multiplication, with results accumulated in INT32. This is real, dedicated silicon — the matmul itself runs in int8, and dequantization happens **after**, on the INT32 result (multiplying by the outer product of the activation scale and weight scale to recover the true FP16 magnitude, as the `out_normal = out_int8 * (x_scale * w_scale.T)` line above does).
+- This is different from 4-bit formats like NF4 (used in QLoRA — see Lesson 3.5), which have no native compute hardware support: those must be dequantized to BF16 **before** any arithmetic happens, and the actual matmul FLOPs run in BF16. NF4's speed benefit is therefore memory-bandwidth-only; INT8's is both memory *and* genuine compute throughput.
+- INT8 also doesn't need a lookup table the way NF4 does. INT8 uses **uniform (affine) quantization** — evenly spaced levels — so the code-to-value relationship is a simple formula, `value = code × scale`, computable with one multiply. NF4 spaces its 16 levels at the *quantiles* of a Gaussian distribution, which are irregular, non-arithmetic numbers — there's no formula from code to value, so NF4 has to store and index into an actual 16-entry table. INT8's uniform spacing is precisely what makes both the simple formula and the native hardware support possible.
+
+| | INT8 (this lesson) | NF4 (QLoRA lesson) |
+|---|---|---|
+| Level spacing | Uniform | Quantile-based (non-uniform) |
+| Code → value | Formula: `code × scale` | Lookup table (16 entries) |
+| Native matmul hardware? | Yes | No — must dequantize to BF16 first |
+| Dequantization timing | After the matmul (on the output) | Before the matmul (on the weights) |
+| Memory savings | Yes | Yes |
+| Compute speedup | Yes (real int8 tensor core throughput) | No (still BF16 FLOPs after dequant) |
+
+---
+
+## Why LLM.int8() Doesn't Need Fine-Tuning to Preserve Quality
+
+It's worth contrasting this explicitly with quantization approaches that *do* require training (like QLoRA's NF4, Lesson 3.5) — the difference isn't that LLM.int8() is more tolerant of error. It's that the error is engineered down to near-zero *before* it ever reaches the model's output:
+
+- The outlier dimensions — the values that cause almost all of the quantization error if mishandled — are pulled out and computed in full FP16 precision, exactly. No approximation there at all.
+- The remaining ~99%+ of values have no outliers by construction (that's the whole point of extracting the outlier dims first), so they're well-behaved, low-dynamic-range numbers that INT8 quantizes with tiny, near-negligible error.
+- Because both pieces individually introduce almost no error, the combined result is numerically very close to the original FP16 computation — close enough that downstream task metrics (perplexity, accuracy) don't move in a statistically meaningful way. This is verified empirically in the paper, not just argued theoretically.
+
+Compare this to weight-only 4-bit formats like NF4: there, *every* weight is compressed to 4 bits with no outlier exception, at roughly double the compression ratio of INT8. The residual error is real and larger, which is why QLoRA pairs it with trainable LoRA adapters — the model needs a mechanism to *learn* its way back to good performance, rather than relying purely on the quantization scheme being lossless enough on its own. LLM.int8() never needs that step because, at 8-bit, careful precision allocation alone gets the error close enough to zero.
 
 ---
 
@@ -297,6 +315,9 @@ For many use cases, this is the right answer. If you have a 13B model that does 
 - Naive weight-only INT8 works well because weight distributions are well-behaved. Activation quantization is the hard problem.
 - Large LLMs (> 6.7B) develop activation outliers: specific feature dimensions with values 100-1000× larger than typical activations. These destroy naive INT8 activation quantization.
 - LLM.int8() solves this with mixed-precision decomposition: extract the ~1% of outlier dimensions, compute them in FP16, compute the remaining ~99% in INT8, combine results.
+- Outlier detection uses a precise three-part empirical criterion, not just a raw magnitude cutoff: magnitude ≥ 6.0, present in ≥25% of layers, and present in ≥6% of sequence positions — all three must hold before a dimension is treated as a systematic outlier.
+- Unlike 4-bit lookup-table formats (NF4), INT8 is a genuine compute datatype: GPU tensor cores multiply INT8 values directly, dequantizing only the result afterward — giving both memory *and* real compute throughput benefits, whereas NF4's benefit is memory-only.
+- LLM.int8() needs no fine-tuning because the quantization error is engineered to near-zero through precision allocation (exact FP16 for outliers, negligible INT8 error for the rest) — a fundamentally different strategy from QLoRA's NF4, which relies on trainable LoRA adapters to compensate for larger residual error at a more aggressive 4-bit compression ratio.
 - bitsandbytes implements LLM.int8() with `load_in_8bit=True` in HuggingFace — one line to get 2× memory reduction with near-zero quality loss.
 - Dynamic quantization (scale computed at inference time) is preferred over static for LLMs because activation distributions vary too much for precomputed static scales.
 
