@@ -2,155 +2,129 @@
 
 ---
 
-## Why INT4 Is Suboptimal for Neural Network Weights
+## Recap: Why Uniform INT4 Wastes Precision on Neural Network Weights
 
-Recall what INT4 represents: 16 evenly-spaced values. For signed INT4, these are:
+Signed INT4 represents 16 evenly-spaced values:
 ```
 -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7
 ```
+Every representable value sits the same "distance" from its neighbors — the grid doesn't care what the data actually looks like.
 
-These 16 values are equally spaced from minimum to maximum. Every representable value is the same "distance" from its neighbors.
+But pretrained neural network weights are not uniformly distributed. Sampling a real weight tensor shows a **near-Gaussian distribution centered at zero**: most values cluster tightly around zero, with only a small fraction taking on large magnitudes. This isn't a coincidence — weight initialization is Gaussian, and gradient-based training tends to preserve roughly that shape.
 
-Now look at the actual distribution of weights in a pre-trained neural network:
+In a Gaussian distribution, ~68% of values sit within 1 standard deviation of zero, ~95% within 2 standard deviations, and only ~5% live out in the tails. INT4's *equal* spacing allocates **half its 16 codes to the sparse tails** and only half to the dense center where 95% of the actual data lives — a large fraction of the grid's resolution is spent on almost nothing.
 
-```python
-import torch
-import matplotlib.pyplot as plt
-from transformers import AutoModelForCausalLM
-
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf")
-
-# Sample weights from a typical layer
-weights = model.model.layers[0].self_attn.q_proj.weight.data.float()
-
-print(f"Mean: {weights.mean():.4f}")
-print(f"Std:  {weights.std():.4f}")
-print(f"Min:  {weights.min():.4f}")
-print(f"Max:  {weights.max():.4f}")
-
-# Distribution characteristics:
-# Mean: ~0.0
-# Std:  ~0.02-0.04
-# Shape: approximately Normal (Gaussian)
-
-# Values near zero are very common
-# Values in the tails (large positive or negative) are rare
-```
-
-Neural network weights follow a **near-Gaussian (Normal) distribution**, centered at zero. This is not accidental — weight initialization is Gaussian, and gradient-based learning tends to maintain this approximate normality.
-
-The implication: **equal spacing is wrong for this distribution**. 
-
-In a Gaussian distribution:
-- ~68% of values fall within 1 standard deviation of zero (the middle)
-- ~95% fall within 2 standard deviations
-- Only ~5% fall in the tails beyond ±2σ
-
-INT4's equal spacing means it allocates half of its representable values to the tails (±4 to ±8 in scaled units) where only 5% of the data lives, and only half to the dense center where 95% of data lives.
-
-This is an enormous waste of representable values.
+This motivates the obvious fix: **don't space the codes evenly — space them to match where the data actually is.** That's quantile quantization, and it's where the real design problem of this lesson begins.
 
 ---
 
-## Information Theory: Optimal Quantization for Normal Data
+## The Real Problem: Why Not Just Use Each Tensor's Own Quantiles?
 
-From information theory, the optimal quantization for a distribution is **quantile quantization** — placing quantization boundaries such that each bin contains an equal fraction of the probability mass.
+The "obviously correct" approach is: for each weight tensor, compute its own empirical quantiles, and place the 16 quantization levels there — each bin then holds an equal share of that tensor's actual values, which is provably the error-minimizing placement for a fixed bit budget.
 
-For a normal distribution, this means:
-- Quantization levels are **densely packed near zero** (where most data lives)
-- Quantization levels are **sparsely placed in the tails** (where little data lives)
+Here's why this "obviously correct" approach is not what's actually done, and it's worth sitting with the problem before seeing the fix:
 
-For a standard normal distribution N(0, 1), the 16 optimal quantization values (for 4-bit) are the values at the **quantiles** `i/16` for `i = 0.5, 1.5, 2.5, ..., 15.5`:
+**Exact quantile estimation is expensive, and it has to be redone for every single tensor.** Finding the true quantiles of a tensor's values means something like sorting or rank-estimating millions of numbers. A large model has thousands of weight tensors, each with a *different* raw distribution (different scale, different exact shape of the histogram) — so this expensive computation can't be done once and reused; it would need to be repeated per tensor, which is computationally impractical at scale.
+
+**So in practice, this cost is dodged with fast *approximate* quantile-estimation algorithms** (e.g. SRAM quantiles) instead of exact sorting. That solves the speed problem, but introduces a new one: approximation error. And critically, that error is **worst exactly at the tails** — the rare, large-magnitude values — because approximate algorithms are tuned to get the bulk of the distribution roughly right at the expense of precision in the sparse extremes.
+
+**This is a real problem, not a minor one, because tail values (outliers) are often the most functionally important weights** in a network — they can encode the sharpest, most decisive parts of what a layer computes. So naive per-tensor quantile quantization ends up expensive *and* least accurate exactly where accuracy matters most. That combination is what NF4 is designed to avoid.
+
+---
+
+## The Key Trick: Fix the Distribution's Shape, Let Only a Scale Constant Vary
+
+Here's the insight that resolves both problems at once, and it's the conceptual heart of NF4.
+
+If every weight tensor had some *arbitrary, unpredictable* distribution shape, there would be no way around estimating quantiles per tensor. But the QLoRA paper makes (and empirically verifies, in its Appendix F) a much stronger claim: **pretrained weights are consistently zero-centered and Gaussian in shape — tensors differ from each other mainly by their standard deviation (how spread out they are), not by the fundamental shape of their distribution.**
+
+If that's true — if every tensor is "the same distribution, just scaled differently" — then you never need to estimate quantiles from real data at all:
+
+1. **Compute the quantiles of one canonical distribution — the standard normal N(0,1) — exactly, once, analytically**, using its known inverse CDF. This is not an approximation of anything: it's a closed-form calculation on a known theoretical distribution, so there's no sorting, no sampling, and no approximation error anywhere in this step — including at the tails.
+2. **For any real weight block, normalize it by its own spread** (in practice, its `absmax` — the largest absolute value in that block, called the **quantization constant**) so its values line up with that same standard shape.
+3. **Reuse the identical 16 quantile boundaries for every block, in every layer, forever.** The expensive part (finding good quantile boundaries) is done exactly once for the whole model — never again, no matter how many tensors or how large the model.
+
+| | Arbitrary / unknown distribution per tensor | Fixed-shape distribution (up to a scale) |
+|---|---|---|
+| Quantile source | Estimated per tensor from real data | Computed once from theory (inverse CDF) |
+| Cost | Expensive, repeated for every tensor | Cheap — computed a single time, ever |
+| Accuracy at outliers | Degraded by approximation error | Exact — no approximation involved |
+| What must be stored per tensor/block | Nothing extra beyond the estimation itself | One scalar: the quantization constant |
+
+This is also exactly *why* the per-block quantization constant exists in NF4 — it isn't only there to rescale dequantized values back to their real magnitude. It's the single number that lets **one universal, precomputed table** correctly serve blocks with wildly different raw magnitudes, without ever having to look at each block's actual empirical distribution.
+
+---
+
+## Information Theory View: Quantile Quantization Is Optimal — Now That the Distribution Is Known
+
+From information theory, the error-minimizing quantization for a *known* distribution is quantile quantization: place boundaries so each bin captures an equal share of the probability mass. For a Gaussian, this means levels packed densely near zero and sparse in the tails — the opposite layout from INT4's equal spacing.
 
 ```python
 import scipy.stats as stats
 import numpy as np
 
-def compute_nf4_values() -> np.ndarray:
+def compute_nf4_raw_quantiles() -> np.ndarray:
     """
-    Compute the 16 NF4 quantization levels using quantile quantization
-    for a standard normal distribution.
+    The 16 quantile levels of a standard normal distribution — the values
+    that would form NF4's grid before the exact-zero adjustment below.
     """
-    
-    # 16 quantiles, evenly spaced, centered
-    # Using i = 0.5/16, 1.5/16, ..., 15.5/16 to get 16 values
     quantile_levels = np.array([(i + 0.5) / 16 for i in range(16)])
-    
-    # The quantile function (inverse CDF) of the standard normal
-    values = stats.norm.ppf(quantile_levels)
-    
+    values = stats.norm.ppf(quantile_levels)   # inverse CDF — closed form, no data needed
     return values
 
-nf4_raw = compute_nf4_values()
-print("Raw NF4 quantile values:")
-print(np.round(nf4_raw, 4))
+print(np.round(compute_nf4_raw_quantiles(), 4))
+# [-1.9673 -1.4741 -1.1477 -0.9013 -0.6893 -0.4994 -0.3192 -0.1574
+#   0.1574  0.3192  0.4994  0.6893  0.9013  1.1477  1.4741  1.9673]
 ```
-
-Output:
-```
-[-1.9673, -1.4741, -1.1477, -0.9013, -0.6893, -0.4994, -0.3192, -0.1574,
-  0.1574,  0.3192,  0.4994,  0.6893,  0.9013,  1.1477,  1.4741,  1.9673]
-```
-
-### Visualizing the Difference
 
 ```
 INT4 (equal spacing):
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 -8  -7  -6  -5  -4  -3  -2  -1   0   1   2   3   4   5   6   7
 
-NF4 (quantile spacing, scaled to same range):
+NF4 (quantile spacing - dense near zero, sparse in the tails):
 |  |  |  | |  | | ||   ||  | |  |  |  |
 -8        -4   -2  -1  0  1  2   4       8
 
-Gaussian density:
+Gaussian density (what the data actually looks like):
                     ████████████
                   ██████████████████
                ██████████████████████████
            ██████████████████████████████████
      ████████████████████████████████████████████
-│────────────────────────────────────────────────│
+|--------------------------------------------------|
 -8                     0                        8
 ```
-
-INT4 wastes representable values in the sparsely populated tails. NF4 concentrates representable values where the data actually is.
+INT4 wastes representable values in the sparsely populated tails; NF4 concentrates them exactly where the (known, assumed) distribution says the data actually lives.
 
 ---
 
-## The NF4 Format: Exact Construction
+## Constructing the Exact NF4 Table
 
-The NF4 values used in the QLoRA paper are not the raw quantiles — they are normalized to [-1, 1] and have exactly zero included:
+The raw quantiles above have one issue for a *weight* format: none of them land exactly on `0.0`. That matters more than it might seem — a large fraction of trained weights are extremely close to zero, and having no code that represents exact zero would force every near-zero weight into a small, non-zero rounding error, introducing a small systematic bias across the entire model.
+
+The fix used in NF4 (and implemented in `bitsandbytes`) is to build the table in two asymmetric halves instead of one symmetric set of 16 quantiles:
+- Compute `2^(k-1)` quantiles for the **negative** half of N(0,1).
+- Compute `2^(k-1) + 1` quantiles for the **positive** half.
+- Merge the two halves and drop the one duplicate zero this produces, leaving exactly 16 unique values — 8 on one side (including a boundary exactly at 0) and 7 on the other, plus that shared zero.
+
+This is why NF4's table looks asymmetric rather than a clean mirror image — it's a deliberate construction to guarantee an exact-zero code exists, not an approximation or a rounding artifact.
 
 ```python
 def construct_nf4_lookup_table() -> np.ndarray:
     """
-    Construct the exact NF4 lookup table as in the QLoRA paper.
+    The exact NF4 lookup table as implemented in bitsandbytes / used by QLoRA.
+    Fixed for every NF4 tensor in every model - computed once, reused forever.
     """
-    
-    # Step 1: Compute quantiles for the negative and positive halves separately
-    # This ensures exactly 0.0 is in the table
-    
-    # 7 negative values: quantiles 1/16 through 7/16 of N(0,1)
-    negative_quantiles = np.array([i / 16 for i in range(1, 8)])
-    negative_values = stats.norm.ppf(negative_quantiles)
-    
-    # 7 positive values (mirror): quantiles 9/16 through 15/16
-    positive_quantiles = np.array([i / 16 for i in range(9, 16)])
-    positive_values = stats.norm.ppf(positive_quantiles)
-    
-    # Combine: 7 negatives + 0 + 7 positives + special = 16 values
-    # Wait — standard NF4 is asymmetric (8 negatives, 7 positives + 0)
-    # The exact construction in bitsandbytes:
-    
     nf4_values = np.array([
-        -1.0,       # Index 0 (most negative)
+        -1.0,                     # index 0  (most negative)
         -0.6961928009986877,
         -0.5250730514526367,
         -0.39491748809814453,
         -0.28444138169288635,
         -0.18477343022823334,
         -0.09105003625154495,
-        0.0,        # Index 7 (zero)
+        0.0,                      # index 7  (exact zero - guaranteed by construction)
         0.07958029955625534,
         0.16093020141124725,
         0.24611230194568634,
@@ -158,258 +132,192 @@ def construct_nf4_lookup_table() -> np.ndarray:
         0.44070982933044434,
         0.5626170039176941,
         0.7229568362236023,
-        1.0         # Index 15 (most positive)
+        1.0                       # index 15 (most positive)
     ])
-    
     return nf4_values
 
-
 NF4_LOOKUP = construct_nf4_lookup_table()
-print("NF4 values:", NF4_LOOKUP)
 ```
-
-These 16 values are stored as a fixed lookup table. They are the same in every NF4 quantization — they never change.
+These 16 numbers never change. They are not re-derived per model, per layer, or per block - they're a fixed constant of the format itself, exactly because of the "fix the distribution shape, vary only the scale" trick from earlier.
 
 ---
 
-## NF4 Quantization and Dequantization
+## Storage vs. Compute: Why NF4 Needs an Actual Lookup Table
 
-### Quantization (Encoding)
+It's worth being explicit about something easy to gloss over: an NF4 weight isn't a compressed float — it's a **4-bit index (0-15) into the table above**, plus one shared scale per block. The real floating-point value only exists transiently, reconstructed at the moment it's needed for a computation, then discarded.
 
-To quantize a weight `w` to NF4:
+This is different from uniform formats (like plain INT4 or the INT8 scheme from LLM.int8()), where evenly-spaced levels mean `code -> value` is a simple formula (`value = code x scale`) — no table required, just one multiply. NF4's levels are **irregularly spaced** (they're quantiles of a Gaussian, not arithmetic steps), so there is no formula connecting "code 6" to its value — the only way to recover it is to store and index into the 16 numbers directly. That's the direct, structural reason NF4 needs a lookup table where a uniform format doesn't.
 
-1. **Normalize:** compute `w_norm = w / absmax(weight_group)` so values lie in [-1, 1].
-2. **Find nearest:** find the index `i` in the NF4 table where `NF4_LOOKUP[i]` is closest to `w_norm`.
-3. **Store:** store the 4-bit index `i` (0-15).
+And because there's no hardware that does arithmetic natively on an arbitrary 16-entry lookup table, NF4 is a **storage-only** datatype: weights sit in GPU memory as 4-bit codes, and right before any matrix multiplication, the relevant block is dequantized — table lookup, then multiply by the block's scale — into BF16, where the actual compute happens. The dequantized BF16 tile is discarded immediately after use; only the codes and the scale persist.
+
+---
+
+## NF4 Quantization and Dequantization Mechanics
 
 ```python
 def nf4_quantize(weights: np.ndarray, group_size: int = 64) -> dict:
-    """
-    Quantize weights to NF4 format.
-    """
-    
-    original_shape = weights.shape
+    """Quantize a weight tensor to NF4 codes, block by block."""
     weights_flat = weights.reshape(-1)
     n_groups = len(weights_flat) // group_size
-    
-    # Output: 4-bit indices (stored as uint8 for simplicity; 
-    # in practice, two 4-bit values packed per byte)
+
     quantized_indices = np.zeros(len(weights_flat), dtype=np.uint8)
     absmax_per_group = np.zeros(n_groups, dtype=np.float32)
-    
+
     for g in range(n_groups):
-        start = g * group_size
-        end = start + group_size
+        start, end = g * group_size, (g + 1) * group_size
         group = weights_flat[start:end]
-        
-        # Step 1: Compute absmax for this group (the scale)
+
+        # The quantization constant for this block
         absmax = np.max(np.abs(group))
         absmax_per_group[g] = absmax
-        
-        # Step 2: Normalize to [-1, 1]
-        if absmax > 0:
-            normalized = group / absmax
-        else:
-            normalized = group
-        
-        # Step 3: Find nearest NF4 value for each weight
+
+        # Normalize onto the same standard scale NF4_LOOKUP was built from
+        normalized = group / absmax if absmax > 0 else group
+
+        # Match each normalized value to its nearest fixed table entry
         for i, w_norm in enumerate(normalized):
-            # Find the index of the nearest value in the NF4 table
-            distances = np.abs(NF4_LOOKUP - w_norm)
-            nearest_idx = np.argmin(distances)
-            quantized_indices[start + i] = nearest_idx
-    
-    return {
-        "indices": quantized_indices.reshape(original_shape),
-        "absmax": absmax_per_group,
-        "group_size": group_size
-    }
+            quantized_indices[start + i] = np.argmin(np.abs(NF4_LOOKUP - w_norm))
+
+    return {"indices": quantized_indices.reshape(weights.shape),
+            "absmax": absmax_per_group, "group_size": group_size}
 
 
 def nf4_dequantize(quantized: dict) -> np.ndarray:
-    """
-    Dequantize NF4 back to float.
-    """
+    """Reconstruct float values from NF4 codes - table lookup, then rescale."""
     indices_flat = quantized["indices"].reshape(-1)
-    absmax = quantized["absmax"]
-    group_size = quantized["group_size"]
-    
+    absmax, group_size = quantized["absmax"], quantized["group_size"]
     weights_flat = np.zeros(len(indices_flat), dtype=np.float32)
-    
+
     for g in range(len(absmax)):
-        start = g * group_size
-        end = start + group_size
-        group_indices = indices_flat[start:end]
-        
-        # Look up NF4 values
-        group_nf4_values = NF4_LOOKUP[group_indices]
-        
-        # Denormalize
-        weights_flat[start:end] = group_nf4_values * absmax[g]
-    
+        start, end = g * group_size, (g + 1) * group_size
+        weights_flat[start:end] = NF4_LOOKUP[indices_flat[start:end]] * absmax[g]
+
     return weights_flat.reshape(quantized["indices"].shape)
 ```
 
-### Quality of NF4 vs INT4
+### A small worked example, by hand
 
-```python
-def compare_quantization_quality(weights: np.ndarray) -> dict:
-    """Compare NF4 vs INT4 quantization error on typical weight data."""
-    
-    # NF4
-    nf4_q = nf4_quantize(weights)
-    nf4_dq = nf4_dequantize(nf4_q)
-    nf4_error = np.sqrt(np.mean((weights - nf4_dq)**2))
-    
-    # INT4 (per-group absmax, same group size)
-    int4_q = int4_quantize(weights)
-    int4_dq = int4_dequantize(int4_q)
-    int4_error = np.sqrt(np.mean((weights - int4_dq)**2))
-    
-    return {
-        "nf4_rmse": nf4_error,
-        "int4_rmse": int4_error,
-        "improvement": (int4_error - nf4_error) / int4_error
-    }
+Take a tiny block of 4 weights, `[0.42, -0.05, 0.91, -0.30]`:
 
-# Typical result for a weight matrix from a large LLM:
-# NF4 RMSE: 0.00041
-# INT4 RMSE: 0.00058  
-# NF4 is ~30% more accurate than INT4 for normally distributed weights
 ```
+absmax = max(|0.42|, |-0.05|, |0.91|, |-0.30|) = 0.91      <- the quantization constant
+
+Normalized (divide by 0.91):
+  0.42 / 0.91 = 0.462
+ -0.05 / 0.91 = -0.055
+  0.91 / 0.91 = 1.000
+ -0.30 / 0.91 = -0.330
+
+Match each to the nearest NF4_LOOKUP entry:
+  0.462  -> nearest is 0.4407  -> code 12
+ -0.055  -> nearest is -0.0911 or 0.0    -> 0.0 is closer -> code 7
+  1.000  -> exact match             -> code 15
+ -0.330  -> nearest is -0.2844 or -0.3949 -> -0.2844 is closer -> code 4
+
+Stored on disk:  codes = [12, 7, 15, 4],  scale = 0.91   (that's it - no floats stored)
+
+Dequantize:
+  code 12 -> 0.4407 x 0.91 = 0.401   (original: 0.42, error 0.019)
+  code 7  -> 0.0    x 0.91 = 0.000   (original: -0.05, error 0.05)
+  code 15 -> 1.0    x 0.91 = 0.91    (original: 0.91, error 0)
+  code 4  -> -0.2844 x 0.91 = -0.259 (original: -0.30, error 0.041)
+```
+Notice the largest weight in the block (0.91, the outlier of this tiny group) is reconstructed *exactly* — it always lands on the table's boundary value +-1.0 after normalization. This isn't a coincidence: it's the direct benefit of the whole "fix the distribution, vary the scale" design — the scale is defined by the block's own max, so the block's most extreme value is always representable, while the quantile spacing gives the best achievable precision to everything else, weighted by where the data is expected to concentrate.
+
+### Quality of NF4 vs. INT4
+
+On typical weight data, NF4 measurably beats plain uniform INT4 at the same bit-width:
+```
+NF4 RMSE:  0.00041
+INT4 RMSE: 0.00058
+-> NF4 is roughly 30% more accurate than INT4 for normally distributed weights
+```
+This gap is the direct, measurable payoff of matching the grid to the data's actual shape instead of spacing it uniformly.
 
 ---
 
 ## Double Quantization: Quantizing the Quantization Constants
 
-NF4 alone requires storing one `absmax` (FP32) per group of 64 weights:
-- 7B model with group_size=64: 7B/64 = ~110M scale factors × 4 bytes = 440 MB overhead
+NF4 alone still needs one FP32 `absmax` per block of 64 weights. For a 7B model with `group_size=64`, that's `7B / 64 ~= 110M` scale factors x 4 bytes ~= **440 MB** of overhead — not huge relative to the model, but not free either.
 
-The QLoRA paper introduces **double quantization**: quantize the scale factors themselves.
-
+**Double quantization** compresses these scale factors themselves, by quantizing them a second time:
 ```
-Level 1 quantization: weights → NF4 indices (using absmax_1 per group)
-Level 2 quantization: absmax_1 values → INT8 (using absmax_2 per group-of-groups)
+Level 1:  weights      -> NF4 codes         (using absmax_1, one per block of 64)
+Level 2:  absmax_1     -> INT8              (using absmax_2, one per group of 256 absmax_1 values)
 ```
 
 ```python
-def double_quantize(weights: np.ndarray, 
-                    inner_group_size: int = 64,
-                    outer_group_size: int = 256) -> dict:
-    """
-    Double quantization: quantize both weights AND their scale factors.
-    """
-    
-    # Step 1: First-level NF4 quantization
-    # Produces: indices (4-bit) + absmax_1 (FP32, one per inner_group_size)
+def double_quantize(weights: np.ndarray, inner_group_size: int = 64, outer_group_size: int = 256) -> dict:
     level1 = nf4_quantize(weights, group_size=inner_group_size)
-    absmax_1 = level1["absmax"]  # FP32, one per 64 weights
-    
-    # Step 2: Second-level INT8 quantization of absmax_1
-    # Produces: absmax_1_int8 (INT8) + absmax_2 (FP32, one per outer_group_size)
-    n_outer_groups = len(absmax_1) // outer_group_size
-    
+    absmax_1 = level1["absmax"]                      # FP32, one per 64 weights
+
+    n_outer = len(absmax_1) // outer_group_size
     absmax_1_int8 = np.zeros_like(absmax_1, dtype=np.int8)
-    absmax_2 = np.zeros(n_outer_groups, dtype=np.float32)
-    
-    for g in range(n_outer_groups):
-        start = g * outer_group_size
-        end = start + outer_group_size
+    absmax_2 = np.zeros(n_outer, dtype=np.float32)    # FP32, one per 256 absmax_1 values - much smaller
+
+    for g in range(n_outer):
+        start, end = g * outer_group_size, (g + 1) * outer_group_size
         group = absmax_1[start:end]
-        
         max_val = np.max(np.abs(group))
         absmax_2[g] = max_val
         absmax_1_int8[start:end] = np.round(group / (max_val / 127)).clip(-127, 127)
-    
-    return {
-        "nf4_indices": level1["indices"],   # 4-bit, dominant storage
-        "absmax_1_int8": absmax_1_int8,      # INT8 (was FP32)
-        "absmax_2": absmax_2,                # FP32, much smaller
-        "inner_group_size": inner_group_size,
-        "outer_group_size": outer_group_size
-    }
+
+    return {"nf4_indices": level1["indices"], "absmax_1_int8": absmax_1_int8,
+            "absmax_2": absmax_2, "inner_group_size": inner_group_size, "outer_group_size": outer_group_size}
 ```
-
-### Memory Savings from Double Quantization
-
-For a 7B model:
 
 | Component | Without DQ | With DQ |
 |---|---|---|
-| NF4 indices (4-bit) | 3.5 GB | 3.5 GB |
-| First-level scales (FP32) | 440 MB | → |
-| First-level scales (INT8) | — | 110 MB |
-| Second-level scales (FP32) | — | 1.7 MB |
+| NF4 codes (4-bit) | 3.5 GB | 3.5 GB |
+| First-level scales | 440 MB (FP32) | 110 MB (INT8) |
+| Second-level scales | -- | 1.7 MB (FP32) |
 | **Total overhead** | **440 MB** | **~112 MB** |
 
-Double quantization reduces the scale factor overhead from 440 MB to ~112 MB — saving ~328 MB. For a 7B model, this is modest. For a 70B model (4.4 GB scale overhead → 1.1 GB), it becomes significant.
-
-The QLoRA paper reports double quantization adds ~0.5 bits per parameter to the effective bit-width (on top of the 4 bits for the weights themselves), i.e., NF4 with double quantization is effectively ~4.5 bits per parameter.
+For a 7B model this saves ~328 MB; for a 70B model (4.4 GB -> ~1.1 GB of overhead), the saving becomes substantial. The QLoRA paper reports this adds back roughly 0.5 bits/parameter on average — so NF4 + double quantization is effectively **~4.5 bits per parameter**, not a clean 4.
 
 ---
 
 ## QLoRA: Putting NF4 Into Practice for Fine-Tuning
 
-NF4 quantization was not introduced for inference — it was introduced to enable **fine-tuning of large models on consumer hardware**. This is the QLoRA paper (Dettmers et al., 2023).
+NF4 wasn't built for inference — it exists specifically to make **fine-tuning** large models feasible on consumer hardware (Dettmers et al., 2023).
 
-### The Problem QLoRA Solves
+### The problem QLoRA solves
 
-Fine-tuning a 7B model in FP16:
-- Model weights: 14 GB
-- Gradients: 14 GB (same size as weights)
-- Adam optimizer states: 28 GB (two moments, each same size as weights)
-- Activations: variable, ~2-4 GB for typical batch sizes
-- **Total: ~60 GB minimum** — requires multiple A100s
+Full fine-tuning a 7B model in FP16 needs weights (14 GB) + gradients (14 GB) + Adam optimizer states (28 GB, two moments) + activations (2-4 GB) — **~60 GB**, requiring multiple A100s. QLoRA's fix: freeze the base model in NF4 (3.5 GB), add small trainable LoRA adapters in BF16, and only compute gradients/optimizer state for those tiny adapters — landing around **6-8 GB**, which fits on a single consumer 24 GB GPU.
 
-QLoRA solution:
-- Freeze base model in NF4 (4-bit) — only 3.5 GB for 7B
-- Add small trainable LoRA adapters in BF16 — only the adapters get gradients
-- Adapter parameters are tiny (0.1-1% of base model) — negligible gradient/optimizer cost
-- **Total: ~6-8 GB for 7B** — fits on a single RTX 3090 (24 GB)
+### Why the base model has to stay frozen - not just "for memory"
 
-### QLoRA Architecture
+There's a deeper reason NF4 weights are frozen during QLoRA training, beyond just saving memory: **they can't meaningfully be trained via ordinary backpropagation in the first place.**
+
+Turning a continuous weight into an NF4 code is a round-to-nearest-table-entry operation — a **step function**. Nudge the underlying float slightly, and almost always the chosen code doesn't change at all; on the rare occasions it does, the output jumps discontinuously rather than shifting smoothly. The derivative of a step function is zero almost everywhere and undefined at the jumps — so `dLoss/dW` is simply not a usable training signal if `W` is NF4-quantized.
+
+QLoRA's answer isn't a clever workaround for this (like a Straight-Through Estimator) — it sidesteps the problem entirely: **freeze `W` completely, and never compute a gradient of it.** Gradients still need to flow *through* the frozen, dequantized weights via the chain rule, to reach the LoRA adapters attached upstream — and that part is fine, because for a fixed set of codes, dequantization (table lookup x scale) behaves as a constant linear map with respect to the layer's input activations. The only thing that was ever non-differentiable is the *rounding* step used to produce the codes — and since QLoRA never updates the codes, it never needs to differentiate that operation at all. All trainable capacity instead lives in the separate LoRA path (`A`, `B`), which is never quantized and has no such problem.
 
 ```
-                    ┌──────────────────────────────────┐
-                    │     Frozen NF4 Base Model         │
-                    │                                   │
-Input → Tokenizer → │  W_NF4 (4-bit) → dequantize BF16 │ → 
-                    │                                   │
-                    │   Dequantized on-the-fly to BF16  │
-                    └──────────────┬───────────────────┘
-                                   │
-                    ┌──────────────┴──────────────────┐
-                    │     LoRA Adapters (BF16)          │
-                    │                                   │
-                    │   W_LoRA = W_base + α(BA)         │
-                    │   A: [r × in_dim]  (trainable)    │
-                    │   B: [out_dim × r] (trainable)    │
-                    │   r: rank (typically 16-64)       │
-                    └─────────────────────────────────┘
-                                   │
+                    +------------------------------------+
+                    |     Frozen NF4 Base Model           |
+Input -> Tokenizer -> |  W_NF4 (4-bit codes + scale)      | ->
+                    |   -> dequantize (lookup x scale) -> BF16, transient, per matmul |
+                    +--------------+---------------------+
+                                   |
+                    +--------------+-------------------+
+                    |     LoRA Adapters (BF16, trainable) |
+                    |   W_LoRA = W_base + alpha(BA)       |
+                    |   A: [r x in_dim], B: [out_dim x r] |
+                    +---------------------------------+
+                                   |
                                 Output
 ```
+Only `A` and `B` ever receive a gradient update. `W`'s codes and scale constants never change across the entire training run.
 
-**The key insight:** The base model weights (NF4) are frozen — no gradients flow through them. Only the LoRA adapters (A and B matrices) receive gradient updates. The NF4 model participates only in the forward pass, where its weights are dequantized to BF16 just-in-time for the matrix multiplication.
+### Paged optimizers
 
-### Paged Optimizers
-
-One more QLoRA innovation: **paged optimizers** for handling memory spikes.
-
-During training, when a long sequence is processed, the gradient computation requires more memory than average. Without paging, this causes OOM errors. QLoRA uses NVIDIA's unified memory (GPU ↔ CPU memory paging) to handle these spikes:
-
+Long sequences combined with gradient checkpointing can cause transient GPU memory spikes large enough to trigger out-of-memory crashes, even when average memory usage looks fine. QLoRA uses NVIDIA's unified memory feature to automatically page optimizer states out to CPU RAM during these spikes and back when needed — transparent to the training loop:
 ```python
 from bitsandbytes.optim import PagedAdamW8bit
 
-# Standard AdamW: stores 2 FP32 moments = 8 bytes/parameter
-# PagedAdamW8bit: stores INT8 moments = 2 bytes/parameter
-# Additionally pages to CPU RAM during memory spikes
-
 optimizer = PagedAdamW8bit(
-    model.parameters(),
-    lr=2e-4,
-    betas=(0.9, 0.95),
-    weight_decay=0.01
+    model.parameters(), lr=2e-4, betas=(0.9, 0.95), weight_decay=0.01
 )
 ```
 
@@ -422,53 +330,39 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import get_peft_model, LoraConfig, TaskType, prepare_model_for_kbit_training
 import torch
 
-# Step 1: Load model in NF4 (4-bit) with double quantization
+# 1. Load the base model in NF4 with double quantization
 bnb_config = BitsAndBytesConfig(
-    load_in_4bit=True,                    # Use 4-bit NF4
-    bnb_4bit_quant_type="nf4",            # NormalFloat 4-bit (not INT4)
-    bnb_4bit_use_double_quant=True,        # Double quantization for scale factors
-    bnb_4bit_compute_dtype=torch.bfloat16  # Compute in BF16 after dequantization
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",             # NormalFloat, not plain INT4
+    bnb_4bit_use_double_quant=True,
+    bnb_4bit_compute_dtype=torch.bfloat16  # dequantize to BF16 for every matmul
 )
 
 model = AutoModelForCausalLM.from_pretrained(
-    "meta-llama/Llama-2-7b-hf",
-    quantization_config=bnb_config,
-    device_map="auto"
+    "meta-llama/Llama-2-7b-hf", quantization_config=bnb_config, device_map="auto"
 )
-
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
 
-# Step 2: Prepare model for k-bit training
-# This disables certain operations incompatible with backprop through quantized layers
-# and enables gradient checkpointing
+# 2. Prepare for k-bit training (enables gradient checkpointing, disables
+#    incompatible ops around the frozen quantized layers)
 model = prepare_model_for_kbit_training(model)
 
-# Step 3: Add LoRA adapters
+# 3. Attach LoRA adapters - on ALL linear layers, not just attention
+#    (needed to match 16-bit performance)
 lora_config = LoraConfig(
-    r=64,                          # LoRA rank (higher = more capacity)
-    lora_alpha=16,                 # Scaling factor (often r/4)
-    target_modules=[               # Which weight matrices to add adapters to
-        "q_proj", "k_proj",
-        "v_proj", "o_proj",
-        "gate_proj", "up_proj", "down_proj"
-    ],
-    lora_dropout=0.1,
-    bias="none",
-    task_type=TaskType.CAUSAL_LM
+    r=64, lora_alpha=16,
+    target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
+                     "gate_proj", "up_proj", "down_proj"],
+    lora_dropout=0.1, bias="none", task_type=TaskType.CAUSAL_LM
 )
-
 model = get_peft_model(model, lora_config)
 
-# Check trainable parameters
-def print_trainable_params(model):
-    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    total = sum(p.numel() for p in model.parameters())
-    print(f"Trainable: {trainable:,} ({100 * trainable / total:.2f}% of total)")
+trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+total = sum(p.numel() for p in model.parameters())
+print(f"Trainable: {trainable:,} ({100*trainable/total:.2f}% of total)")
+# Trainable: 167,772,160 (2.39% of total) - only the LoRA adapters
 
-print_trainable_params(model)
-# Trainable: 167,772,160 (2.39% of total)  ← Only LoRA adapters!
-
-# Step 4: Train
+# 4. Train
 from transformers import TrainingArguments, Trainer
 
 training_args = TrainingArguments(
@@ -477,34 +371,23 @@ training_args = TrainingArguments(
     per_device_train_batch_size=4,
     gradient_accumulation_steps=4,
     learning_rate=2e-4,
-    fp16=False,          # Use BF16 instead
     bf16=True,
     warmup_ratio=0.03,
     lr_scheduler_type="cosine",
-    logging_steps=10,
-    optim="paged_adamw_8bit",   # Paged optimizer for memory efficiency
+    optim="paged_adamw_8bit",
     save_strategy="epoch"
 )
 
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=your_dataset,
-    tokenizer=tokenizer
-)
-
+trainer = Trainer(model=model, args=training_args, train_dataset=your_dataset, tokenizer=tokenizer)
 trainer.train()
 
-# Step 5: Save only the LoRA adapters (not the base model)
+# 5. Save only the adapters - the frozen NF4 base is never modified
 model.save_pretrained("./llama-2-7b-lora-adapters")
 
-# Step 6: Load for inference
+# 6. Reload for inference: base in NF4 + adapters on top
 from peft import PeftModel
-
 base_model = AutoModelForCausalLM.from_pretrained(
-    "meta-llama/Llama-2-7b-hf",
-    quantization_config=bnb_config,
-    device_map="auto"
+    "meta-llama/Llama-2-7b-hf", quantization_config=bnb_config, device_map="auto"
 )
 model = PeftModel.from_pretrained(base_model, "./llama-2-7b-lora-adapters")
 ```
@@ -516,60 +399,40 @@ model = PeftModel.from_pretrained(base_model, "./llama-2-7b-lora-adapters")
 ```
 Task: Fine-tune Llama-2 7B
 
-Full fine-tuning (FP16):
-  Model weights:       14 GB
-  Gradients:           14 GB
-  Optimizer (Adam):    28 GB
-  Activations:          4 GB
-  Total:              ~60 GB  (requires 2× A100 80GB)
-
-LoRA fine-tuning (FP16 base):
-  Model weights:       14 GB
-  Adapter gradients:   0.3 GB (only 2.4% of params)
-  Optimizer:           0.6 GB (only adapter params)
-  Activations:          4 GB
-  Total:              ~19 GB  (1× A100 80GB)
-
-QLoRA (NF4 base + LoRA adapters):
-  Model weights (NF4): 3.5 GB
-  Double quant scales: 0.1 GB
-  Adapter gradients:   0.3 GB
-  Optimizer (paged):   0.3 GB
-  Activations:          3 GB (gradient checkpointing reduces this)
-  Total:               ~7.5 GB  (1× RTX 3090 24GB!)
+Full fine-tuning (FP16):        ~60 GB   (weights 14 + grads 14 + Adam 28 + activ. 4) -> 2x A100 80GB
+LoRA fine-tuning (FP16 base):   ~19 GB   (weights 14 + tiny adapter grads/optim + activ. 4) -> 1x A100 80GB
+QLoRA (NF4 base + LoRA):        ~7.5 GB  (weights 3.5 + DQ scales 0.1 + adapter grads/optim 0.6 + activ. 3) -> 1x RTX 3090 24GB
 ```
-
-QLoRA makes it possible to fine-tune a 7B model on a single consumer GPU. This democratized fine-tuning — before QLoRA, fine-tuning any LLM larger than ~1B required enterprise GPU access.
+This is the number that mattered: QLoRA made it possible to fine-tune a 7B model on a single consumer GPU — before this, fine-tuning anything above ~1B parameters generally required enterprise-grade hardware.
 
 ---
 
-## Summary: NF4 and Why It Matters
+## Summary
 
-- **INT4 wastes representable values** by spacing them equally across the range, even though neural network weights follow a near-Gaussian distribution concentrated near zero.
-- **NF4 (NormalFloat 4-bit)** uses quantile quantization — derived from information theory — to place the 16 representable values at the quantiles of the standard normal distribution. This allocates precision proportionally to data density.
-- **NF4 is ~30% more accurate than INT4** for normally distributed weights at the same bit-width.
-- **Double quantization** further compresses the scale factors (one per group of 64) by quantizing them to INT8, saving ~400 MB for 7B models.
-- **QLoRA** combines NF4 + double quantization + LoRA adapters + paged optimizers to enable fine-tuning of 7B models on a single 24GB consumer GPU (and 13B models on a 48GB workstation GPU).
-- The base model is frozen in NF4 and dequantized to BF16 on-the-fly for computation. Only the LoRA adapter parameters (~2-3% of total) receive gradient updates and require optimizer states.
+- **The core problem NF4 solves isn't "how to compress weights" in the abstract — it's "how to get quantile-quality quantization without paying for expensive, outlier-inaccurate per-tensor quantile estimation."** Exact quantiles require sorting/rank-estimating each tensor separately (expensive, must repeat per tensor); fast approximations are cheap but inaccurate exactly at the tails, where the most important (outlier) weights live.
+- **The fix**: assume every weight tensor shares the same underlying shape (zero-centered Gaussian) and differs only by a scale factor. This lets the 16 quantile boundaries be computed **once, exactly, analytically** from the standard normal distribution — no sorting, no per-tensor cost, no approximation error anywhere, including the tails. Each block then only needs to store one scalar (its **quantization constant**, e.g. absmax) to reuse that single fixed table.
+- **NF4's table is asymmetric by construction** (8 negative quantiles + 7 positive + a shared exact zero) specifically to guarantee a dedicated code for zero, since near-zero values are extremely common in trained weights.
+- **NF4 is a storage-only datatype.** Because its levels are irregularly spaced (quantiles, not arithmetic steps), there's no formula from code to value — only a lookup table. Compute always happens in BF16, dequantized block-by-block right before each matmul, and discarded immediately after.
+- **Quantizing a block always represents its own extreme value exactly** (it lands on the table's +-1.0 boundary after normalization) — a direct consequence of scaling by the block's own absmax.
+- **Double quantization** compresses the per-block scale constants themselves (FP32 -> INT8), cutting their overhead from ~440 MB to ~112 MB on a 7B model — meaningful at 70B+ scale.
+- **QLoRA freezes the NF4 base entirely — not just for memory savings, but because quantized weights can't be usefully trained via backprop at all** (rounding is a non-differentiable step function). Gradients flow *through* the frozen dequantized weights to reach the separate, full-precision LoRA adapters, which are the only parameters ever updated.
+- **Net result**: NF4 + double quantization + LoRA + paged optimizers together bring 7B fine-tuning from ~60 GB down to ~7.5 GB — fitting on a single consumer GPU.
 
 ---
 
 ## Chapter Summary: The Quantization Landscape
 
-You have now covered the full quantization stack:
-
 | Method | Bits | Memory (7B) | Quality | Use Case |
 |---|---|---|---|---|
 | FP16/BF16 | 16 | 14 GB | Baseline | Training, reference |
-| LLM.int8() | 8 | 7 GB | ≈FP16 | Easy 2× reduction |
+| LLM.int8() | 8 | 7 GB | ~=FP16 | Easy 2x reduction |
 | GPTQ INT4 | 4 | ~4 GB | -1-2% | Large model inference |
 | AWQ INT4 | 4 | ~4 GB | -1-2% | Fast GPU inference |
 | NF4 + DQ | ~4.5 | ~4 GB | -1-2% | Fine-tuning on consumer GPU |
 | GGUF Q4_K_M | ~4.5 | ~4 GB | -1-2% | CPU inference |
 
-The right choice depends on your use case:
-- **Serving inference at scale** → AWQ (fastest GPU throughput)
-- **Maximum quality at INT4** → GPTQ with desc_act
-- **Fine-tuning on limited hardware** → QLoRA with NF4
-- **CPU / edge deployment** → GGUF
-- **Just need 2× reduction, zero quality loss** → LLM.int8()
+- **Serving inference at scale** -> AWQ (fastest GPU throughput, most calibration-robust)
+- **Maximum quality at INT4** -> GPTQ with `desc_act`
+- **Fine-tuning on limited hardware** -> QLoRA with NF4
+- **CPU / edge deployment** -> GGUF
+- **Just need 2x reduction, zero quality loss** -> LLM.int8()
