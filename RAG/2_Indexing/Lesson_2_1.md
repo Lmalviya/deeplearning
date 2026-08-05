@@ -433,6 +433,11 @@ Full document text → Long-context embedding model → Per-token embeddings
                                                            ↓
                                          Pool each chunk's token embeddings → chunk vector
 ```
+![Late Chunking Image](..\assets\late_chunking.png)
+
+```
+Note: The late chunking approach reverses this process. Instead of dividing the document into chunks and then computing the embeddings, the whole text of the document is first passed through a Transformer model. This generates an embedding representation for each token, and these tokens now contain contextual information not only limited to a single chunk, but encompassing the entire document. After this step, the chunking process is performed, where the original text is divided into chunks, and the corresponding tokens are used to compute the mean pooling, resulting in the final representation.
+```
 
 Because the embedding model processes the full document before chunking, each token's embedding already incorporates context from the surrounding document. When you pool a chunk's token embeddings into a single chunk vector, that vector encodes both the local text and its document-level context.
 
